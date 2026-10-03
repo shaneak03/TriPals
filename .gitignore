@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,7 +41,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# routing pipeline: venv and raw OSM caches (outputs in public/data are committed)
+# routing pipeline: venv, secrets and raw OSM caches (outputs in public/data are committed)
+/scripts/routing/.env
 /scripts/routing/.venv/
 /scripts/routing/cache/
 __pycache__/
