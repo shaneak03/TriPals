@@ -96,3 +96,60 @@ def load_city(city_id: str) -> CityConfig:
 
     budgets = sorted(r["minutes"] for r in db.table("time_budgets").select("minutes").execute().data)
     return CityConfig(city["id"], city["name"], (min(xs), min(ys), max(xs), max(ys)), categories, pairs, budgets)
+
+
+# ---------------------------------------------------------------- writes
+
+POI_BATCH = 1000
+
+
+def upsert_pois(city_id: str, pois: list[dict], run_started: str) -> None:
+    """Insert or update a city's POIs. `updated_at` marks rows seen in this run (see prune_pois)."""
+    rows = [
+        {
+            "id": p["id"],
+            "city_id": city_id,
+            "name": p["name"],
+            "category_id": p["category"],
+            "weight": p["weight"],
+            "location": f"SRID=4326;POINT({p['lng']} {p['lat']})",
+            "updated_at": run_started,
+        }
+        for p in pois
+    ]
+    for i in range(0, len(rows), POI_BATCH):
+        client().table("pois").upsert(rows[i : i + POI_BATCH], on_conflict="id").execute()
+
+
+def prune_pois(city_id: str, run_started: str) -> int:
+    """Delete the city's POIs not seen in this run (closed or renamed in OSM, or now uncategorised)."""
+    deleted = (
+        client().table("pois").delete().eq("city_id", city_id).lt("updated_at", run_started).execute().data
+    )
+    return len(deleted)
+
+
+def replace_pair_routes(pair_id: str, routes: list[dict]) -> int:
+    """Atomically upsert a pair's routes and their ordered POIs; drops routes not in `routes`."""
+    return client().rpc("replace_pair_routes", {"p_pair_id": pair_id, "p_routes": routes}).execute().data
+
+
+def delete_routes_of_inactive_pairs(city_id: str) -> int:
+    inactive = [
+        r["id"]
+        for r in client().table("route_pairs").select("id").eq("city_id", city_id).eq("is_active", False).execute().data
+    ]
+    if not inactive:
+        return 0
+    return len(client().table("routes").delete().in_("pair_id", inactive).execute().data)
+
+
+# ---------------------------------------------------------------- reads used by the fallback export
+
+
+def walk_options(city_id: str) -> dict:
+    return client().rpc("get_walk_options", {"p_city_id": city_id}).execute().data
+
+
+def walk_routes(pair_id: str) -> dict:
+    return client().rpc("get_routes", {"p_pair_id": pair_id}).execute().data
