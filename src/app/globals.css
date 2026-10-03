@@ -1,26 +1,56 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Coastal Dusk design tokens. ~70% neutrals, 20% teal, 10% coral. */
+@theme {
+  --color-sand: #faf7f2;
+  --color-surface: #ffffff;
+  --color-ink: #1e2a32;
+  --color-muted: #6b7a85;
+  --color-line: #e6e1d8;
+
+  --color-primary: #2a7f86;
+  --color-primary-hover: #236b71;
+  --color-primary-tint: #cfe9e6;
+
+  --color-accent: #ff7a59;
+  --color-accent-hover: #f26d4c;
+  --color-accent-tint: #ffe9e2;
+
+  --color-highlight: #ffc857;
+  --color-route-fast: #b8c2c9;
+  --color-scrim: #10202a;
+
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 20px;
+  --radius-control: 12px;
+
+  --shadow-card: 0 2px 12px rgba(30, 42, 50, 0.06);
+  --shadow-card-hover: 0 8px 24px rgba(30, 42, 50, 0.08);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-sand);
+  color: var(--color-ink);
+}
+
+/* Scenic route draws itself once its section scrolls into view (see InView). */
+.route-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 800ms ease-out;
+}
+[data-inview="false"] .route-draw {
+  stroke-dashoffset: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
