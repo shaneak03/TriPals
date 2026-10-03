@@ -166,8 +166,9 @@ def plan(graph, pois_by_id, source, target, budgets, k):
     for budget in budgets:
         limit = fastest_m + budget * METRES_PER_MIN + 1e-6
         feasible = [c for c in scored if c[0] <= limit]
-        # Most unique POIs, then highest weighted score, then shortest.
-        length, _, _, edges, lam, method = max(feasible, key=lambda c: (c[1], c[2], -c[0]))
+        # Highest weighted score of unique POIs (sights 3, parks 2, cafés/shops 1),
+        # then most unique POIs, then shortest.
+        length, _, _, edges, lam, method = max(feasible, key=lambda c: (c[2], c[1], -c[0]))
         best = summarise(graph, list(edges), pois_by_id)
         scenic[str(budget)] = {
             **best,
@@ -208,7 +209,7 @@ if __name__ == "__main__":
               f"{s['extra_min']:>5} {len(s['poi_ids']):>5} {s['extra_pois']:>6} {s['poi_score']:>6}  {s['method']}")
 
     ten = scenic["10"]
-    ratio = len(ten["poi_ids"]) / max(len(fastest["poi_ids"]), 1)
-    print(f"\n+10 min passes {ratio:.1f}x the POIs of the fastest route")
+    print(f"\n+10 min: {ten['poi_score'] / fastest['poi_score']:.2f}x the weighted score, "
+          f"{len(ten['poi_ids']) / len(fastest['poi_ids']):.2f}x the POIs of the fastest route")
     named = [pois_by_id[p] for p in ten["poi_ids"] if pois_by_id[p]["weight"] == 3]
     print("Weight-3 sights on the +10 route:", ", ".join(p["name"] for p in named[:15]))

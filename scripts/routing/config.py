@@ -33,3 +33,27 @@ POI_RULES = [
     ("amenity", ["cafe", "restaurant", "bar"], 1),
     ("shop", True, 1),
 ]
+
+BUDGETS_MIN = [0, 5, 10, 15, 20, 30]
+
+# Named places (lat, lng) at the spot a walker would start or finish.
+PLACES = {
+    "garibaldi-station": ("Hotel by Porta Garibaldi station", 45.4846, 9.1873),
+    "porta-garibaldi": ("Porta Garibaldi", 45.4801, 9.1875),
+    "duomo": ("Duomo di Milano", 45.4641, 9.1900),
+    "brera-academy": ("Brera Academy", 45.4719, 9.1879),
+    "pinacoteca-brera": ("Pinacoteca di Brera", 45.4721, 9.1881),
+    "castello": ("Castello Sforzesco", 45.4695, 9.1795),
+    "galleria": ("Galleria Vittorio Emanuele II", 45.4655, 9.1900),
+    "navigli": ("Navigli (Darsena)", 45.4525, 9.1765),
+}
+
+# Preset walks: (pair id, start place, end place). The first is the main demo pair.
+PAIRS = [
+    ("garibaldi-duomo", "garibaldi-station", "duomo"),
+    ("brera-castello", "brera-academy", "castello"),
+    ("duomo-navigli", "duomo", "navigli"),
+    ("castello-galleria", "castello", "galleria"),
+    ("garibaldi-pinacoteca", "porta-garibaldi", "pinacoteca-brera"),
+]
+MAIN_PAIR = "garibaldi-duomo"

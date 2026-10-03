@@ -44,7 +44,15 @@ python3 -m venv .venv
 .venv/bin/python routing.py  # demo: Porta Garibaldi -> Duomo at every budget
 ```
 
-`routing.py` computes the fastest route (shortest by length) and, for each extra-time budget at 4.8 km/h, a "most to see" route. Scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)`, with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes for λ ∈ {0, 0.3, 0.6, 1}; via routes are needed because large λ pushes every scored edge onto the cost floor, so the sweep alone stops adding detours. For each budget the winner is the candidate with the most unique POIs within 30 m whose length fits the budget (ties: higher weighted score, then shorter).
+`routing.py` computes the fastest route (shortest by length) and, for each extra-time budget at 4.8 km/h, a "most to see" route. Scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)`, with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes for λ ∈ {0, 0.3, 0.6, 1}; via routes are needed because large λ pushes every scored edge onto the cost floor, so the sweep alone stops adding detours. For each budget the winner is the candidate with the highest weighted score of unique POIs within 30 m whose length fits the budget (ties: more POIs, then shorter).
+
+```bash
+.venv/bin/python precompute.py  # -> public/data/routes/<pair_id>.json + index.json
+```
+
+`precompute.py` runs every preset pair in `config.py` (`PLACES`, `PAIRS`) at budgets 0, 5, 10, 15, 20 and 30 min. Each file holds `start`, `end`, `fastest`, `scenic` (keyed by budget) and the `pois` those routes pass. A route has a GeoJSON `geometry`, `distance_m`, `duration_min`, `poi_ids` in walking order with matching `poi_minutes`, and `poi_score`; scenic routes add `extra_min` and `extra_pois`. It then checks the acceptance criteria (every scenic route within budget, +0 equals fastest, main pair at +10 min ≥ 2× the POIs) and exits non-zero if one fails.
+
+Full rerun after changing weights or the bbox: `fetch.py`, `score.py`, `precompute.py` (about a minute with a warm cache).
 
 ## Learn More
 
