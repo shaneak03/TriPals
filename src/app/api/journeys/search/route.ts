@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { searchJourneys } from "@/lib/journeys/engine";
 import { demoCoachProvider, demoFlightProvider, demoTrainProvider } from "@/lib/journeys/providers";
+import { duffelFlightProvider } from "@/lib/journeys/duffel";
 import type { SearchRequest } from "@/lib/journeys/types";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-const providers = [demoFlightProvider, demoTrainProvider, demoCoachProvider];
+const providers = [
+  process.env.DUFFEL_API_TOKEN ? duffelFlightProvider : demoFlightProvider,
+  demoTrainProvider,
+  demoCoachProvider,
+];
 
 async function getOrCreateLocation(supabase: ReturnType<typeof getSupabaseAdmin>, name: string) {
   const { data: existing, error: findError } = await supabase

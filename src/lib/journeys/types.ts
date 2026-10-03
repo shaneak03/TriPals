@@ -13,6 +13,7 @@ export type OptimiseFor = "price" | "time" | "value" | "scenic";
 
 export type LocationInput = {
   name: string;
+  code?: string;
   coordinates?: { latitude: number; longitude: number };
 };
 
