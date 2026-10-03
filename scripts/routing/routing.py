@@ -1,8 +1,10 @@
 """Step 3: fastest vs "most to see" walking routes on the scored graph.
 
-Run directly for a demo: Porta Garibaldi -> Duomo at every budget.
+Run directly for a demo of the city's main pair (lowest sort_order) at every budget.
 """
 
+import argparse
+import json
 import math
 
 import networkx as nx
@@ -11,7 +13,7 @@ import osmnx as ox
 from pyproj import Transformer
 from shapely.geometry import LineString, Point
 
-from config import METRIC_CRS, POI_RADIUS_M, SCORED_GRAPH_PATH, WALK_SPEED_KMH
+from config import METRIC_CRS, POI_RADIUS_M, WALK_SPEED_KMH, pois_geojson_path, scored_graph_path
 
 METRES_PER_MIN = WALK_SPEED_KMH * 1000 / 60
 LAMBDAS = np.round(np.arange(0, 5.0001, 0.1), 2)
@@ -23,9 +25,9 @@ VIA_LAMBDAS = [0.0, 0.3, 0.6, 1.0]
 _to_metric = Transformer.from_crs("EPSG:4326", METRIC_CRS, always_xy=True)
 
 
-def load_graph():
+def load_graph(city_id):
     graph = ox.load_graphml(
-        SCORED_GRAPH_PATH, edge_dtypes={"poi_score": float, "poi_ids": str}
+        scored_graph_path(city_id), edge_dtypes={"poi_score": float, "poi_ids": str}
     )
     for _, _, data in graph.edges(data=True):
         ids = data.get("poi_ids") or ""
@@ -180,36 +182,32 @@ def plan(graph, pois_by_id, source, target, budgets, k):
     return fastest, scenic
 
 
-def load_pois_by_id():
-    import json
-
-    from config import POIS_GEOJSON_PATH
-
-    features = json.loads(POIS_GEOJSON_PATH.read_text())["features"]
+def load_pois_by_id(city_id):
+    features = json.loads(pois_geojson_path(city_id).read_text())["features"]
     return {f["properties"]["id"]: f["properties"] for f in features}
 
 
 if __name__ == "__main__":
-    graph = load_graph()
-    pois_by_id = load_pois_by_id()
+    from db import load_city
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--city", default="milan")
+    city = load_city(parser.parse_args().city)
+    pair = city.pairs[0]
+
+    graph = load_graph(city.id)
+    pois_by_id = load_pois_by_id(city.id)
     k = calibrate_k(graph)
     print(f"k = {k:.2f} m per weight point (POI radius {POI_RADIUS_M} m, {WALK_SPEED_KMH} km/h)")
 
-    source = nearest_node(graph, 45.4846, 9.1873)  # Milano Porta Garibaldi station
-    target = nearest_node(graph, 45.4641, 9.1900)  # Piazza del Duomo
-    budgets = [0, 5, 10, 15, 20, 30]
-    fastest, scenic = plan(graph, pois_by_id, source, target, budgets, k)
+    source = nearest_node(graph, pair.start.lat, pair.start.lng)
+    target = nearest_node(graph, pair.end.lat, pair.end.lng)
+    fastest, scenic = plan(graph, pois_by_id, source, target, city.budgets, k)
 
-    print("\nPorta Garibaldi -> Duomo")
+    print(f"\n{pair.start.name} -> {pair.end.name}")
     print(f"{'route':>10} {'λ':>5} {'dist m':>7} {'min':>6} {'+min':>5} {'POIs':>5} {'+POIs':>6} {'score':>6}")
     print(f"{'fastest':>10} {'':>5} {fastest['distance_m']:>7} {fastest['duration_min']:>6} {'':>5} "
           f"{len(fastest['poi_ids']):>5} {'':>6} {fastest['poi_score']:>6}")
     for budget, s in scenic.items():
         print(f"{'+' + budget + ' min':>10} {s['lambda']:>5} {s['distance_m']:>7} {s['duration_min']:>6} "
               f"{s['extra_min']:>5} {len(s['poi_ids']):>5} {s['extra_pois']:>6} {s['poi_score']:>6}  {s['method']}")
-
-    ten = scenic["10"]
-    print(f"\n+10 min: {ten['poi_score'] / fastest['poi_score']:.2f}x the weighted score, "
-          f"{len(ten['poi_ids']) / len(fastest['poi_ids']):.2f}x the POIs of the fastest route")
-    named = [pois_by_id[p] for p in ten["poi_ids"] if pois_by_id[p]["weight"] == 3]
-    print("Weight-3 sights on the +10 route:", ", ".join(p["name"] for p in named[:15]))

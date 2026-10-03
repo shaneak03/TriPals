@@ -2,6 +2,7 @@
   "pairs": [
     {
       "id": "garibaldi-duomo",
+      "label": "Porta Garibaldi station to the Duomo",
       "start": {
         "id": "garibaldi-station",
         "name": "Hotel by Porta Garibaldi station",
@@ -17,6 +18,7 @@
     },
     {
       "id": "brera-castello",
+      "label": "Brera Academy to Castello Sforzesco",
       "start": {
         "id": "brera-academy",
         "name": "Brera Academy",
@@ -32,6 +34,7 @@
     },
     {
       "id": "duomo-navigli",
+      "label": "Duomo to the Navigli",
       "start": {
         "id": "duomo",
         "name": "Duomo di Milano",
@@ -47,6 +50,7 @@
     },
     {
       "id": "castello-galleria",
+      "label": "Castello Sforzesco to the Galleria",
       "start": {
         "id": "castello",
         "name": "Castello Sforzesco",
@@ -62,6 +66,7 @@
     },
     {
       "id": "garibaldi-pinacoteca",
+      "label": "Porta Garibaldi to the Pinacoteca di Brera",
       "start": {
         "id": "porta-garibaldi",
         "name": "Porta Garibaldi",

@@ -1,8 +1,10 @@
-"""Step 1: download the Milan walk network and named points of interest from OSM.
+"""Step 1: download a city's walk network and named points of interest from OSM.
 
-Writes the raw graph and POI geometries to cache/ and a point GeoJSON to public/data/.
+The bbox and POI categories (OSM tags + weights) come from Supabase. Writes the raw
+graph and POI geometries to cache/<city>/ and a point GeoJSON to public/data/.
 """
 
+import argparse
 import json
 
 import geopandas as gpd
@@ -10,56 +12,69 @@ import osmnx as ox
 import pandas as pd
 
 from config import (
-    BBOX,
     BUFFER_DEG,
     CACHE_DIR,
     DEDUPE_RADIUS_M,
-    GRAPH_PATH,
     METRIC_CRS,
-    POI_RULES,
-    POIS_CACHE_PATH,
-    POIS_GEOJSON_PATH,
+    graph_path,
+    pois_cache_path,
+    pois_geojson_path,
 )
+from db import Category, CityConfig, load_city
 
 
-def buffered_bbox():
-    w, s, e, n = BBOX
-    return (w - BUFFER_DEG, s - BUFFER_DEG, e + BUFFER_DEG, n + BUFFER_DEG)
+def setup_osmnx():
+    ox.settings.use_cache = True
+    ox.settings.cache_folder = str(CACHE_DIR / "http")
 
 
-def fetch_graph():
+def fetch_graph(city: CityConfig):
     print("Downloading walk network…")
-    graph = ox.graph_from_bbox(buffered_bbox(), network_type="walk", truncate_by_edge=True)
-    ox.save_graphml(graph, GRAPH_PATH)
-    print(f"  {graph.number_of_nodes():,} nodes, {graph.number_of_edges():,} edges -> {GRAPH_PATH.name}")
+    w, s, e, n = city.bbox
+    buffered = (w - BUFFER_DEG, s - BUFFER_DEG, e + BUFFER_DEG, n + BUFFER_DEG)
+    graph = ox.graph_from_bbox(buffered, network_type="walk", truncate_by_edge=True)
+    path = graph_path(city.id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ox.save_graphml(graph, path)
+    print(f"  {graph.number_of_nodes():,} nodes, {graph.number_of_edges():,} edges -> {path.relative_to(CACHE_DIR)}")
 
 
-def classify(row):
-    """Return (category, weight) for the highest-weight rule the feature matches."""
-    for key, values, weight in POI_RULES:  # rules are ordered by weight, highest first
+def matches(category: Category, row) -> bool:
+    for key, values in category.osm_tags.items():
         value = row.get(key)
         if not isinstance(value, str) or value == "no":
             continue
-        if values is True or value in values:
-            # Keys matched on any value collapse to the key itself ("historic", "shop").
-            return (key if values is True else value), weight
+        if values == "*" or value in values:
+            return True
+    return False
+
+
+def classify(row, categories: list[Category]):
+    """(category id, weight) of the highest-weight category the feature matches."""
+    for category in categories:  # sorted highest weight first
+        if matches(category, row):
+            return category.id, category.weight
     return None, 0
 
 
-def fetch_pois():
-    print("Downloading points of interest…")
+def overpass_tags(categories: list[Category]) -> dict:
     tags = {}
-    for key, values, _ in POI_RULES:
-        if values is True:
-            tags[key] = True
-        elif tags.get(key) is not True:
-            tags[key] = sorted(set(tags.get(key, [])) | set(values))
+    for category in categories:
+        for key, values in category.osm_tags.items():
+            if values == "*":
+                tags[key] = True
+            elif tags.get(key) is not True:
+                tags[key] = sorted(set(tags.get(key, [])) | set(values))
+    return tags
 
-    raw = ox.features_from_bbox(BBOX, tags).reset_index()
+
+def fetch_pois(city: CityConfig):
+    print("Downloading points of interest…")
+    raw = ox.features_from_bbox(city.bbox, overpass_tags(city.categories)).reset_index()
     print(f"  {len(raw):,} raw features")
 
     raw = raw[raw["name"].notna() & (raw["name"].str.strip() != "")]
-    classified = raw.apply(classify, axis=1, result_type="expand")
+    classified = raw.apply(classify, axis=1, result_type="expand", categories=city.categories)
     raw["category"], raw["weight"] = classified[0], classified[1]
     pois = raw[raw["weight"] > 0].copy()
     pois["id"] = pois["element"] + "/" + pois["id"].astype(str)
@@ -70,8 +85,8 @@ def fetch_pois():
     pois = dedupe(pois.to_crs(METRIC_CRS))
     print(f"  {len(pois):,} after removing same-name duplicates within {DEDUPE_RADIUS_M} m")
 
-    pois.to_file(POIS_CACHE_PATH, driver="GPKG")
-    write_geojson(pois)
+    pois.to_file(pois_cache_path(city.id), driver="GPKG")
+    write_geojson(city.id, pois)
 
 
 def dedupe(pois):
@@ -90,7 +105,7 @@ def dedupe(pois):
     return pois.loc[kept].sort_values("id")
 
 
-def write_geojson(pois):
+def write_geojson(city_id, pois):
     points = pois.copy()
     points["geometry"] = points.geometry.representative_point()
     points = points.to_crs("EPSG:4326")
@@ -109,16 +124,22 @@ def write_geojson(pois):
         }
         for p in points.itertuples()
     ]
-    POIS_GEOJSON_PATH.write_text(json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False))
+    path = pois_geojson_path(city_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False))
     counts = pd.Series([f["properties"]["category"] for f in features]).value_counts()
-    print(f"  wrote {len(features):,} POIs -> {POIS_GEOJSON_PATH.relative_to(POIS_GEOJSON_PATH.parents[2])}")
+    print(f"  wrote {len(features):,} POIs -> {path.relative_to(path.parents[2])}")
     print(counts.to_string())
 
 
+def main(city_id: str):
+    city = load_city(city_id)
+    setup_osmnx()
+    fetch_graph(city)
+    fetch_pois(city)
+
+
 if __name__ == "__main__":
-    CACHE_DIR.mkdir(exist_ok=True)
-    POIS_GEOJSON_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ox.settings.use_cache = True
-    ox.settings.cache_folder = str(CACHE_DIR / "http")
-    fetch_graph()
-    fetch_pois()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--city", default="milan")
+    main(parser.parse_args().city)

@@ -5,10 +5,12 @@ Each edge of the walk graph gets:
   poi_score – sum of those POIs' weights, each POI counted once per edge
 """
 
+import argparse
+
 import geopandas as gpd
 import osmnx as ox
 
-from config import GRAPH_PATH, METRIC_CRS, POI_RADIUS_M, POIS_CACHE_PATH, SCORED_GRAPH_PATH
+from config import METRIC_CRS, POI_RADIUS_M, graph_path, pois_cache_path, scored_graph_path
 
 
 def score_edges(graph, pois):
@@ -74,10 +76,17 @@ def print_summary(edges, hits, pois):
           .head(10)[["street", "length", "poi_score", "per_100m"]].round(0).to_string(index=False))
 
 
-if __name__ == "__main__":
-    graph = ox.load_graphml(GRAPH_PATH)
-    pois = gpd.read_file(POIS_CACHE_PATH).to_crs(METRIC_CRS)
+def main(city_id: str, summary: bool = True):
+    graph = ox.load_graphml(graph_path(city_id))
+    pois = gpd.read_file(pois_cache_path(city_id)).to_crs(METRIC_CRS)
     edges, hits = score_edges(graph, pois)
-    ox.save_graphml(graph, SCORED_GRAPH_PATH)
-    print(f"Scored {len(edges):,} directed edges -> {SCORED_GRAPH_PATH.name}")
-    print_summary(edges, hits, pois)
+    ox.save_graphml(graph, scored_graph_path(city_id))
+    print(f"Scored {len(edges):,} directed edges -> {scored_graph_path(city_id).name}")
+    if summary:
+        print_summary(edges, hits, pois)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--city", default="milan")
+    main(parser.parse_args().city)
