@@ -1,19 +1,16 @@
-"use client"; // This tells Next.js this is an interactive client-side component
+"use client";
 
 import React, { useState } from 'react';
 
-// Options for the user to choose from
 const INTEREST_TAGS = [
   "Museums", "Nightlife", "Nature", "Foodie", "Hiking", "Photography", "Historical Sites"
 ];
 
 export default function ConnectPage() {
-  // React State to keep track of what the user clicks
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [matchFound, setMatchFound] = useState(false);
 
-  // Function to add or remove an interest when a tag is clicked
   const toggleInterest = (interest: string) => {
     setSelectedInterests((prev) => 
       prev.includes(interest) 
@@ -22,11 +19,8 @@ export default function ConnectPage() {
     );
   };
 
-  // Function to simulate the Python ML matching delay
   const handleFindMatches = () => {
     setIsSearching(true);
-    
-    // Simulates waiting for the matching algorithm to process
     setTimeout(() => {
       setIsSearching(false);
       setMatchFound(true);
@@ -42,7 +36,6 @@ export default function ConnectPage() {
         <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
           <h2 className="text-xl font-semibold mb-4">What are your trip goals?</h2>
           
-          {/* Interest Tags */}
           <div className="flex flex-wrap gap-3 mb-8">
             {INTEREST_TAGS.map((interest) => (
               <button
@@ -68,12 +61,11 @@ export default function ConnectPage() {
           </button>
         </div>
       ) : (
-        // The Success UI after a match is found
         <div className="bg-green-50 p-8 rounded-xl border border-green-200 text-center animate-pulse duration-1000">
           <div className="text-5xl mb-4">👋</div>
           <h2 className="text-2xl font-bold text-green-900 mb-2">Match Found!</h2>
           <p className="text-green-800 mb-6">
-            We found another student heading to Gothenburg with a 92% compatibility score in {selectedInterests.join(", ")}!
+            We found another traveler with a 92% compatibility score in {selectedInterests.join(", ")}!
           </p>
           <button 
             onClick={() => setMatchFound(false)}

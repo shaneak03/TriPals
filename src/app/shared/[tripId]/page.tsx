@@ -1,11 +1,18 @@
 import React from 'react';
 import RecommendationsList from '@/components/RecommendationsList';
+import { createClient } from '@supabase/supabase-js';
 
-// 1. Simulated database fetch function
+// Initialize Supabase (ensure these are in your .env.local file)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 async function getTripData(tripId: string) {
-  // Simulates a quick network delay
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  
+  // Real Supabase Query:
+  // const { data, error } = await supabase.from('trips').select('*').eq('id', tripId).single();
+  // if (data) return data;
+
+  // Fallback mock data so your UI works before the database tables are built
   if (tripId === '12345') {
     return {
       id: tripId,
@@ -17,16 +24,11 @@ async function getTripData(tripId: string) {
       ]
     };
   }
-  
   return null;
 }
 
-// 2. Make the component async to support server-side fetching
 export default async function SharedTripPage({ params }: { params: { tripId: string } }) {
-  const tripId = params.tripId;
-  
-  // 3. Fetch the data directly on the server before sending HTML to the browser
-  const tripData = await getTripData(tripId);
+  const tripData = await getTripData(params.tripId);
 
   if (!tripData) {
     return <div className="p-8 text-center text-red-500 font-bold">Trip not found.</div>;
@@ -42,7 +44,6 @@ export default async function SharedTripPage({ params }: { params: { tripId: str
         </span>
       </header>
 
-      {/* 4. Dynamically map over the fetched data array */}
       <div className="space-y-6 border-l-2 border-gray-200 ml-3 pl-6 mb-12">
         {tripData.days.map((day) => (
           <div key={day.dayNumber} className="relative">
@@ -53,7 +54,6 @@ export default async function SharedTripPage({ params }: { params: { tripId: str
         ))}
       </div>
 
-      {/* 5. Render the recommendations component here */}
       <RecommendationsList />
     </div>
   );
