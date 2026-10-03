@@ -34,6 +34,12 @@ python3 -m venv .venv
 
 `fetch.py` downloads the walk network for the bounding box in `config.py` (plus a ~300 m buffer) and every named POI matching `POI_RULES`. POI weights are 3 for tourism sights and historic features, 2 for places of worship, fountains, parks and gardens, and 1 for cafés, restaurants, bars and shops. Same-name POIs less than 15 m apart are merged. HTTP responses are cached, so reruns are fast; delete `cache/` to force a fresh download.
 
+```bash
+.venv/bin/python score.py   # cache/milan_walk_scored.graphml + summary stats
+```
+
+`score.py` projects the graph and POIs to EPSG:32632 (metres) and tags each edge with `poi_ids` (POIs within 30 m of the edge, `;`-separated) and `poi_score` (the sum of their weights). Parks and buildings count when the street passes within 30 m of their outline. It prints the share of scored segments and the top streets so you can sanity-check the weights.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
