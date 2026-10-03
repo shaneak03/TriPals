@@ -20,6 +20,20 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Walk routing data (Milan)
+
+The `/walks` planner uses data precomputed offline from OpenStreetMap, so the demo never calls a live API. The pipeline lives in `scripts/routing/` (settings in `config.py`). Outputs in `public/data/` are committed; raw OSM downloads go to `scripts/routing/cache/` (gitignored).
+
+```bash
+cd scripts/routing
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+.venv/bin/python fetch.py   # walk network + named POIs -> public/data/milan_pois.geojson
+```
+
+`fetch.py` downloads the walk network for the bounding box in `config.py` (plus a ~300 m buffer) and every named POI matching `POI_RULES`. POI weights are 3 for tourism sights and historic features, 2 for places of worship, fountains, parks and gardens, and 1 for cafés, restaurants, bars and shops. Same-name POIs less than 15 m apart are merged. HTTP responses are cached, so reruns are fast; delete `cache/` to force a fresh download.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

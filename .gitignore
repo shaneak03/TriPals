@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# routing pipeline: venv and raw OSM caches (outputs in public/data are committed)
+/scripts/routing/.venv/
+/scripts/routing/cache/
+__pycache__/
