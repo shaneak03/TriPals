@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, CalendarDays, MapPin, PlaneTakeoff, User, type LucideIcon } from "lucide-react";
 import heroImage from "../../../public/images/hero-milan.jpg";
 import type { Journey } from "@/lib/journeys/types";
@@ -14,34 +14,27 @@ type SearchField = {
   span: string;
 };
 
-const popularCities = [
-  { name: "London", code: "LON" },
-  { name: "Milan", code: "MIL" },
-  { name: "Paris", code: "PAR" },
-  { name: "Barcelona", code: "BCN" },
-  { name: "Lisbon", code: "LIS" },
-  { name: "Amsterdam", code: "AMS" },
-  { name: "Berlin", code: "BER" },
-  { name: "Rome", code: "ROM" },
-  { name: "Madrid", code: "MAD" },
-  { name: "Dublin", code: "DUB" },
-  { name: "Vienna", code: "VIE" },
-  { name: "Prague", code: "PRG" },
-  { name: "Copenhagen", code: "CPH" },
-  { name: "Athens", code: "ATH" },
-  { name: "Brussels", code: "BRU" },
-  { name: "Gothenburg", code: "GOT" },
-  { name: "Stockholm", code: "STO" },
-] as const;
+type City = { id: string; name: string; code: string; countryCode?: string | null };
 
 export function Hero() {
   const [from, setFrom] = useState("London");
   const [to, setTo] = useState("Milan");
+  const [cities, setCities] = useState<City[]>([]);
   const [date, setDate] = useState("2026-11-12");
   const [travellers, setTravellers] = useState("1");
   const [journeys, setJourneys] = useState<Journey[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/locations")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load cities");
+        return response.json();
+      })
+      .then((payload) => setCities(payload.cities ?? []))
+      .catch(() => setError("Unable to load cities. Check your Supabase connection."));
+  }, []);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,8 +46,8 @@ export function Hero() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          origin: { name: from, code: cityCode(from) },
-          destination: { name: to, code: cityCode(to) },
+          origin: { name: from, code: cities.find((city) => city.name === from)?.code },
+          destination: { name: to, code: cities.find((city) => city.name === to)?.code },
           departureDate: date,
           travellers: Number(travellers),
           currency: "GBP",
@@ -99,8 +92,8 @@ export function Hero() {
         </div>
 
         <form onSubmit={handleSearch} className="mt-10 grid grid-cols-2 items-center gap-2 rounded-card bg-surface p-4 shadow-card sm:gap-4 sm:p-6 lg:grid-cols-12 lg:p-8">
-          <CitySelect icon={PlaneTakeoff} label="From" value={from} onChange={setFrom} hint="European city" span="col-span-2 lg:col-span-3" />
-          <CitySelect icon={MapPin} label="To" value={to} onChange={setTo} hint="European city" span="col-span-2 lg:col-span-3" />
+          <CitySelect cities={cities} icon={PlaneTakeoff} label="From" value={from} onChange={setFrom} hint="European city" span="col-span-2 lg:col-span-3" />
+          <CitySelect cities={cities} icon={MapPin} label="To" value={to} onChange={setTo} hint="European city" span="col-span-2 lg:col-span-3" />
           <label className="col-span-1 flex min-w-0 items-center gap-3.5 rounded-control p-3 lg:col-span-2">
             <CalendarDays aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
             <span className="min-w-0 flex-1">
@@ -128,14 +121,15 @@ export function Hero() {
   );
 }
 
-function CitySelect({ icon: Icon, label, value, onChange, hint, span }: SearchField & { onChange: (value: string) => void }) {
+function CitySelect({ cities, icon: Icon, label, value, onChange, hint, span }: SearchField & { cities: City[]; onChange: (value: string) => void }) {
   return (
     <label className={`${span} flex min-w-0 items-center gap-3.5 rounded-control p-3`}>
       <Icon aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-muted">{label}</span>
         <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full bg-transparent font-semibold text-ink outline-none">
-          {popularCities.map((city) => <option key={city.code} value={city.name}>{city.name}</option>)}
+          {cities.length === 0 && <option>Loading cities…</option>}
+          {cities.map((city) => <option key={city.id} value={city.name}>{city.name}</option>)}
         </select>
         {hint && <span className="block truncate text-sm text-muted">{hint}</span>}
       </span>
@@ -192,6 +186,3 @@ function formatDateTime(value?: string) {
   }).format(new Date(value));
 }
 
-function cityCode(name: string) {
-  return popularCities.find((city) => city.name === name)?.code;
-}
