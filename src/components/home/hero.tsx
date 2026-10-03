@@ -1,6 +1,10 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { ArrowRight, CalendarDays, MapPin, PlaneTakeoff, User, type LucideIcon } from "lucide-react";
 import heroImage from "../../../public/images/hero-milan.jpg";
+import type { Journey } from "@/lib/journeys/types";
 
 type SearchField = {
   icon: LucideIcon;
@@ -10,15 +14,59 @@ type SearchField = {
   span: string;
 };
 
-// Demo search: London → Milan is the hero route for the MVP.
-const fields: SearchField[] = [
-  { icon: PlaneTakeoff, label: "From", value: "London", hint: "All airports", span: "col-span-2 lg:col-span-3" },
-  { icon: MapPin, label: "To", value: "Milan", hint: "Centrale & airports", span: "col-span-2 lg:col-span-3" },
-  { icon: CalendarDays, label: "Departure", value: "12 Nov", span: "col-span-1 lg:col-span-2" },
-  { icon: User, label: "Travellers", value: "1 traveller", span: "col-span-1 lg:col-span-2" },
-];
+type City = { id: string; name: string; code: string; countryCode?: string | null };
 
 export function Hero() {
+  const [from, setFrom] = useState("London");
+  const [to, setTo] = useState("Milan");
+  const [cities, setCities] = useState<City[]>([]);
+  const [date, setDate] = useState("2026-11-12");
+  const [travellers, setTravellers] = useState("1");
+  const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/locations")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load cities");
+        return response.json();
+      })
+      .then((payload) => setCities(payload.cities ?? []))
+      .catch(() => setError("Unable to load cities. Check your Supabase connection."));
+  }, []);
+
+  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSearching(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/journeys/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: { name: from, code: cities.find((city) => city.name === from)?.code },
+          destination: { name: to, code: cities.find((city) => city.name === to)?.code },
+          departureDate: date,
+          travellers: Number(travellers),
+          currency: "GBP",
+          modes: ["flight", "train", "coach"],
+          optimiseFor: "value",
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Search failed");
+      setJourneys(payload.journeys ?? []);
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : "Search failed");
+      setJourneys([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
   return (
     <section className="relative isolate flex min-h-[640px] flex-col justify-end overflow-hidden lg:min-h-[700px]">
       <Image
@@ -43,32 +91,98 @@ export function Hero() {
           </p>
         </div>
 
-        <div className="mt-10 grid grid-cols-2 items-center gap-2 rounded-card bg-surface p-4 shadow-card sm:gap-4 sm:p-6 lg:grid-cols-12 lg:p-8">
-          {fields.map(({ icon: Icon, label, value, hint, span }) => (
-            <button
-              key={label}
-              type="button"
-              className={`${span} flex min-w-0 items-center gap-3.5 rounded-control p-3 text-left transition-colors hover:bg-sand`}
-            >
-              <Icon aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm text-muted">{label}</span>
-                <span className="block truncate font-semibold text-ink">{value}</span>
-                {hint && <span className="block truncate text-sm text-muted">{hint}</span>}
-              </span>
-            </button>
-          ))}
+        <form onSubmit={handleSearch} className="mt-10 grid grid-cols-2 items-center gap-2 rounded-card bg-surface p-4 shadow-card sm:gap-4 sm:p-6 lg:grid-cols-12 lg:p-8">
+          <CitySelect cities={cities} icon={PlaneTakeoff} label="From" value={from} onChange={setFrom} hint="European city" span="col-span-2 lg:col-span-3" />
+          <CitySelect cities={cities} icon={MapPin} label="To" value={to} onChange={setTo} hint="European city" span="col-span-2 lg:col-span-3" />
+          <label className="col-span-1 flex min-w-0 items-center gap-3.5 rounded-control p-3 lg:col-span-2">
+            <CalendarDays aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted">Date</span>
+              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full bg-transparent font-semibold text-ink outline-none" />
+            </span>
+          </label>
+          <label className="col-span-1 flex min-w-0 items-center gap-3.5 rounded-control p-3 lg:col-span-2">
+            <User aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted">Travellers</span>
+              <input type="number" min="1" max="9" value={travellers} onChange={(event) => setTravellers(event.target.value)} className="w-full bg-transparent font-semibold text-ink outline-none" />
+            </span>
+          </label>
+          <button type="submit" disabled={isSearching} className="col-span-2 flex h-14 items-center justify-center gap-2 whitespace-nowrap rounded-control bg-accent px-4 font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-wait disabled:opacity-70 lg:col-span-2">
+            {isSearching ? "Searching…" : "Find true cost"}
+            {!isSearching && <ArrowRight aria-hidden className="size-[18px]" strokeWidth={1.75} />}
+          </button>
+        </form>
 
-          {/* Search isn't built yet — for the demo, jump to the London → Milan comparison. */}
-          <a
-            href="#true-cost"
-            className="col-span-2 flex h-14 items-center justify-center gap-2 whitespace-nowrap rounded-control bg-accent px-4 font-medium text-white transition-colors hover:bg-accent-hover active:scale-[0.98] lg:col-span-2"
-          >
-            Find true cost
-            <ArrowRight aria-hidden className="size-[18px]" strokeWidth={1.75} />
-          </a>
-        </div>
+        {error && <p role="alert" className="mt-3 rounded-control bg-accent-tint px-4 py-3 text-sm text-ink">{error}</p>}
+        {journeys.length > 0 && <JourneyResults journeys={journeys} />}
       </div>
     </section>
   );
 }
+
+function CitySelect({ cities, icon: Icon, label, value, onChange, hint, span }: SearchField & { cities: City[]; onChange: (value: string) => void }) {
+  return (
+    <label className={`${span} flex min-w-0 items-center gap-3.5 rounded-control p-3`}>
+      <Icon aria-hidden className="size-[22px] shrink-0 text-primary" strokeWidth={1.75} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm text-muted">{label}</span>
+        <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full bg-transparent font-semibold text-ink outline-none">
+          {cities.length === 0 && <option>Loading cities…</option>}
+          {cities.map((city) => <option key={city.id} value={city.name}>{city.name}</option>)}
+        </select>
+        {hint && <span className="block truncate text-sm text-muted">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+function JourneyResults({ journeys }: { journeys: Journey[] }) {
+  return (
+    <div className="mt-4 grid gap-3 lg:grid-cols-3" aria-live="polite">
+      {journeys.map((journey) => (
+        <article key={journey.id} className="rounded-card bg-surface p-5 text-ink shadow-card">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium capitalize text-primary">{journey.type} route</span>
+            <span className="text-xl font-semibold tabular-nums">£{(journey.totalPriceMinor / 100).toFixed(2)}</span>
+          </div>
+          <p className="mt-3 text-sm text-muted">{Math.round(journey.totalDurationMinutes / 60)}h {journey.totalDurationMinutes % 60}m · {journey.transferCount} transfers</p>
+          <div className="mt-4 space-y-3 border-t border-line pt-4">
+            {journey.legs.map((leg, index) => (
+              <div key={`${journey.id}-${index}`} className="rounded-control bg-sand p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">{leg.mode.replaceAll("_", " ")}</span>
+                  <span className="text-xs text-muted">{leg.durationMinutes} min</span>
+                </div>
+                <p className="mt-2 text-sm font-medium text-ink">
+                  {leg.origin} <span className="text-muted">→</span> {leg.destination}
+                </p>
+                {(leg.operator || leg.serviceNumber) && (
+                  <p className="mt-1 text-xs text-muted">
+                    {leg.operator ?? "Transport service"}{leg.serviceNumber ? ` · ${leg.serviceNumber}` : ""}
+                  </p>
+                )}
+                {(leg.departureAt || leg.arrivalAt) && (
+                  <p className="mt-1 text-xs tabular-nums text-muted">
+                    {formatDateTime(leg.departureAt)}{leg.arrivalAt ? ` → ${formatDateTime(leg.arrivalAt)}` : ""}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
