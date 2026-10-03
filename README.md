@@ -40,6 +40,12 @@ python3 -m venv .venv
 
 `score.py` projects the graph and POIs to EPSG:32632 (metres) and tags each edge with `poi_ids` (POIs within 30 m of the edge, `;`-separated) and `poi_score` (the sum of their weights). Parks and buildings count when the street passes within 30 m of their outline. It prints the share of scored segments and the top streets so you can sanity-check the weights.
 
+```bash
+.venv/bin/python routing.py  # demo: Porta Garibaldi -> Duomo at every budget
+```
+
+`routing.py` computes the fastest route (shortest by length) and, for each extra-time budget at 4.8 km/h, a "most to see" route. Scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)`, with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes for λ ∈ {0, 0.3, 0.6, 1}; via routes are needed because large λ pushes every scored edge onto the cost floor, so the sweep alone stops adding detours. For each budget the winner is the candidate with the most unique POIs within 30 m whose length fits the budget (ties: higher weighted score, then shorter).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
