@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Logo } from "./logo";
 
 const navLinks = [
-  { label: "Flights", href: "#true-cost" },
-  { label: "Walks", href: "#walks" },
-  { label: "Itineraries", href: "#itineraries" },
-];
+  { id: "flights", label: "Flights", href: "/#true-cost" },
+  { id: "walks", label: "Walks", href: "/walks" },
+  { id: "itineraries", label: "Itineraries", href: "/#itineraries" },
+] as const;
 
-export function SiteHeader() {
+export function SiteHeader({ active }: { active?: (typeof navLinks)[number]["id"] }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-ink/5 bg-sand/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-5 md:h-20 lg:px-8">
@@ -17,13 +17,14 @@ export function SiteHeader() {
 
         <nav aria-label="Main" className="hidden items-center gap-9 md:flex">
           {navLinks.map((link) => (
-            <a
-              key={link.href}
+            <Link
+              key={link.id}
               href={link.href}
-              className="text-[15px] text-muted transition-colors hover:text-ink"
+              aria-current={link.id === active ? "page" : undefined}
+              className="text-[15px] text-muted transition-colors hover:text-ink aria-[current=page]:font-medium aria-[current=page]:text-ink"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
