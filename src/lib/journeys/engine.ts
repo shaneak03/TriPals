@@ -1,4 +1,6 @@
 import type { Journey, JourneyLeg, SearchRequest, TransportProvider } from "./types";
+import { addTransitousAirportTransfers } from "./airport-transfers";
+import { convertMinorUnits } from "@/lib/currency";
 
 const id = () => crypto.randomUUID();
 
@@ -23,12 +25,18 @@ export function assembleJourney(legs: JourneyLeg[], currency: string): Journey {
   const walkingMinutes = legs
     .filter((leg) => leg.mode === "walking")
     .reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  const priceUnavailable = legs.some((leg) => leg.isEstimatedPrice && leg.priceMinor === 0);
+  const hasDemoLeg = legs.some((leg) => leg.details?.provider?.toString().startsWith("demo"));
+  const hasEstimatedLeg = legs.some((leg) => leg.isEstimatedPrice && leg.priceMinor > 0);
+  const priceSource = priceUnavailable ? "unavailable" : hasDemoLeg ? "demo" : hasEstimatedLeg ? "estimated" : "live";
 
   return {
     id: id(),
     type: journeyType(legs),
     legs,
     totalPriceMinor: totalPrice(legs),
+    priceUnavailable,
+    priceSource,
     currency,
     totalDurationMinutes: totalDuration(legs),
     totalWaitMinutes: Math.max(0, totalDuration(legs) - mainLegs.reduce((sum, leg) => sum + leg.durationMinutes, 0)),
@@ -36,7 +44,10 @@ export function assembleJourney(legs: JourneyLeg[], currency: string): Journey {
     walkingMinutes,
     bookingType: hasSelfTransfer ? "multiple_bookings" : "unknown",
     scores: { value: 0, convenience: 0, scenic: walkingMinutes },
-    warnings: hasSelfTransfer ? ["This route includes a self-transfer between bookings."] : [],
+    warnings: [
+      ...(hasSelfTransfer ? ["This route includes a self-transfer between bookings."] : []),
+      ...(priceUnavailable ? ["One or more fares are unavailable and have not been included in the total."] : []),
+    ],
   };
 }
 
@@ -48,19 +59,42 @@ export async function searchJourneys(
   const activeProviders = providers.filter((provider) => selectedModes.includes(provider.mode));
   const results = await Promise.all(activeProviders.map((provider) => provider.search(request)));
 
-  const journeys = results
-    .flat()
-    .map((legs) => assembleJourney(legs, request.currency));
+  // Transitous is a public endpoint with strict rate limits. Process these
+  // enrichments sequentially instead of sending one pair of requests per
+  // flight at the same time.
+  const resolvedJourneys: Journey[] = [];
+  for (const legs of results.flat()) {
+    const enrichedLegs = await addTransitousAirportTransfers(legs, request.origin, request.destination, request.currency);
+    const normalizedLegs = await Promise.all(enrichedLegs.map(async (leg) => {
+      if (leg.currency === request.currency) return leg;
+      const convertedPrice = await convertMinorUnits(leg.priceMinor, leg.currency, request.currency);
+      return {
+        ...leg,
+        priceMinor: convertedPrice,
+        currency: request.currency,
+        details: {
+          ...leg.details,
+          originalPriceMinor: leg.priceMinor,
+          originalCurrency: leg.currency,
+          conversionApplied: true,
+        },
+      };
+    }));
+    const journey = assembleJourney(normalizedLegs, request.currency);
+    // Transitous city-to-city results are valid alternatives, but do not let
+    // their transit legs appear attached to a flight card.
+    resolvedJourneys.push(journey);
+  }
 
-  const maxPrice = Math.max(...journeys.map((journey) => journey.totalPriceMinor), 1);
-  const maxDuration = Math.max(...journeys.map((journey) => journey.totalDurationMinutes), 1);
+  const maxPrice = Math.max(...resolvedJourneys.map((journey) => journey.totalPriceMinor), 1);
+  const maxDuration = Math.max(...resolvedJourneys.map((journey) => journey.totalDurationMinutes), 1);
 
-  return journeys
+  return resolvedJourneys
     .map((journey) => ({
       ...journey,
       scores: {
         ...journey.scores,
-        value: Math.round((1 - journey.totalPriceMinor / maxPrice) * 70 + (1 - journey.totalDurationMinutes / maxDuration) * 30),
+        value: Math.round((journey.priceUnavailable ? 0 : (1 - journey.totalPriceMinor / maxPrice) * 70) + (1 - journey.totalDurationMinutes / maxDuration) * 30),
         convenience: Math.max(0, 100 - journey.transferCount * 15 - (journey.bookingType === "multiple_bookings" ? 20 : 0)),
       },
     }))

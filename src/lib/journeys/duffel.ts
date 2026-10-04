@@ -108,6 +108,8 @@ export const duffelFlightProvider: TransportProvider = {
           provider: "duffel",
           offerId: offer.id,
           expiresAt: offer.expires_at,
+          originAirportCode: segment.origin.iata_code,
+          destinationAirportCode: segment.destination.iata_code,
         },
       }))),
     );

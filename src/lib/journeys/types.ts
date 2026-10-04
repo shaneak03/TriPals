@@ -10,6 +10,7 @@ export const transportModes = [
 export type TransportMode = (typeof transportModes)[number];
 export type SearchMode = Extract<TransportMode, "flight" | "train" | "coach">;
 export type OptimiseFor = "price" | "time" | "value" | "scenic";
+export type PriceSource = "live" | "estimated" | "demo" | "unavailable";
 
 export type LocationInput = {
   name: string;
@@ -50,6 +51,8 @@ export type Journey = {
   type: "flight" | "train" | "coach" | "mixed";
   legs: JourneyLeg[];
   totalPriceMinor: number;
+  priceUnavailable: boolean;
+  priceSource: PriceSource;
   currency: string;
   totalDurationMinutes: number;
   totalWaitMinutes: number;

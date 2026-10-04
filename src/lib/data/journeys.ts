@@ -46,6 +46,7 @@ export async function saveJourneySearch(request: SearchRequest, journeys: Journe
         scenic_score: journey.scores.scenic,
         rank: rank + 1,
         warnings: journey.warnings,
+        metadata: { priceSource: journey.priceSource, priceUnavailable: journey.priceUnavailable },
       })
       .select("id")
       .single();
