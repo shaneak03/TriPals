@@ -1,0 +1,191 @@
+{
+  "city": {
+    "id": "paris",
+    "bbox": [
+      2.325,
+      48.845,
+      2.375,
+      48.87
+    ],
+    "name": "Paris",
+    "centre": [
+      2.348,
+      48.8575
+    ],
+    "country": "France"
+  },
+  "pairs": [
+    {
+      "id": "louvre-notre-dame",
+      "end": {
+        "id": "notre-dame",
+        "lat": 48.853,
+        "lng": 2.3487,
+        "kind": "landmark",
+        "name": "Notre-Dame de Paris",
+        "selectable": true
+      },
+      "label": "The Louvre to Notre-Dame",
+      "start": {
+        "id": "louvre",
+        "lat": 48.8606,
+        "lng": 2.3376,
+        "kind": "landmark",
+        "name": "Louvre (Cour Napoléon)",
+        "selectable": true
+      }
+    },
+    {
+      "id": "vosges-pantheon",
+      "end": {
+        "id": "pantheon",
+        "lat": 48.8462,
+        "lng": 2.3461,
+        "kind": "landmark",
+        "name": "Panthéon",
+        "selectable": true
+      },
+      "label": "Place des Vosges to the Panthéon",
+      "start": {
+        "id": "place-des-vosges",
+        "lat": 48.8556,
+        "lng": 2.3655,
+        "kind": "landmark",
+        "name": "Place des Vosges",
+        "selectable": true
+      }
+    }
+  ],
+  "budgets": [
+    {
+      "label": "No extra time",
+      "minutes": 0,
+      "is_default": false
+    },
+    {
+      "label": "+5 min",
+      "minutes": 5,
+      "is_default": false
+    },
+    {
+      "label": "+10 min",
+      "minutes": 10,
+      "is_default": true
+    },
+    {
+      "label": "+15 min",
+      "minutes": 15,
+      "is_default": false
+    },
+    {
+      "label": "+20 min",
+      "minutes": 20,
+      "is_default": false
+    },
+    {
+      "label": "+30 min",
+      "minutes": 30,
+      "is_default": false
+    }
+  ],
+  "categories": [
+    {
+      "id": "attraction",
+      "icon": "Camera",
+      "label": "Landmark",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "museum",
+      "icon": "Landmark",
+      "label": "Museum",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "gallery",
+      "icon": "Palette",
+      "label": "Gallery",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "artwork",
+      "icon": "Brush",
+      "label": "Artwork",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "viewpoint",
+      "icon": "Eye",
+      "label": "Viewpoint",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "historic",
+      "icon": "Castle",
+      "label": "Historic",
+      "weight": 3,
+      "is_highlighted": true
+    },
+    {
+      "id": "place_of_worship",
+      "icon": "Church",
+      "label": "Church",
+      "weight": 2,
+      "is_highlighted": true
+    },
+    {
+      "id": "fountain",
+      "icon": "Droplets",
+      "label": "Fountain",
+      "weight": 2,
+      "is_highlighted": true
+    },
+    {
+      "id": "park",
+      "icon": "Trees",
+      "label": "Park",
+      "weight": 2,
+      "is_highlighted": true
+    },
+    {
+      "id": "garden",
+      "icon": "Flower2",
+      "label": "Garden",
+      "weight": 2,
+      "is_highlighted": false
+    },
+    {
+      "id": "cafe",
+      "icon": "Coffee",
+      "label": "Café",
+      "weight": 1,
+      "is_highlighted": false
+    },
+    {
+      "id": "restaurant",
+      "icon": "UtensilsCrossed",
+      "label": "Restaurant",
+      "weight": 1,
+      "is_highlighted": false
+    },
+    {
+      "id": "bar",
+      "icon": "Wine",
+      "label": "Bar",
+      "weight": 1,
+      "is_highlighted": false
+    },
+    {
+      "id": "shop",
+      "icon": "ShoppingBag",
+      "label": "Shop",
+      "weight": 1,
+      "is_highlighted": false
+    }
+  ]
+}
