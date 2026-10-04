@@ -1,85 +1,69 @@
-import type { JourneyLeg, SearchRequest, TransportProvider } from "./types";
+import { LocationInput, TransportMode } from "../journeys/types";
+import { PlacesProvider, RoutingProvider, Place, RouteResult } from "./types";
 
-// Temporary adapters. Replace each search method with a real provider call later.
-const localAccess = (request: SearchRequest, departureHub: string, arrivalHub: string): JourneyLeg[] => [
-  {
-    mode: "local_transit",
-    origin: `${request.origin.name} city centre`,
-    destination: departureHub,
-    durationMinutes: 45,
-    priceMinor: 1500,
-    currency: request.currency,
-    operator: "Local transit",
-    isEstimatedPrice: true,
-  },
-  {
-    mode: "airport_transfer",
-    origin: arrivalHub,
-    destination: `${request.destination.name} city centre`,
-    durationMinutes: 50,
-    priceMinor: 1300,
-    currency: request.currency,
-    operator: "Airport transfer",
-    isEstimatedPrice: true,
-  },
-];
+// Haversine formula to calculate distance between two coordinates
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; 
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+            Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  return R * c;
+}
 
-export const demoFlightProvider: TransportProvider = {
-  name: "Demo flight provider",
-  mode: "flight",
-  async search(request) {
-    return [[
-      ...localAccess(request, "London Heathrow", "Milan Linate"),
-    ].flatMap((leg, index) => index === 0
-      ? [leg, {
-          mode: "flight",
-          origin: "London Heathrow",
-          destination: "Milan Linate",
-          durationMinutes: 120,
-          priceMinor: 4500,
-          currency: request.currency,
-          operator: "Demo Airways",
-          serviceNumber: "TP101",
-          isEstimatedPrice: true,
-        }]
-      : [leg])];
-  },
-};
+export class MockPlacesProvider implements PlacesProvider {
+  async searchPlaces(destination: LocationInput, interests: string[]): Promise<Place[]> {
+    if (!destination.coordinates) throw new Error("Coordinates required");
+    const { latitude, longitude } = destination.coordinates;
+    const places: Place[] = [];
+    
+    // Dynamically generate places clustered around the requested coordinates
+    interests.forEach((interest, index) => {
+      // Generate 3 places per interest
+      for (let i = 0; i < 3; i++) {
+        // Add a random offset (roughly 0 to 5km away from city center)
+        const latOffset = (Math.random() - 0.5) * 0.05;
+        const lngOffset = (Math.random() - 0.5) * 0.05;
+        
+        places.push({
+          id: `place_${interest}_${i}_${Date.now()}`,
+          name: `${interest} Spot ${i + 1} (${destination.name})`,
+          location: {
+            name: `${interest} Spot`,
+            coordinates: { latitude: latitude + latOffset, longitude: longitude + lngOffset }
+          },
+          category: interest,
+          durationMinutes: interest.includes("Food") ? 90 : 120, // Default durations
+          priceMinor: Math.floor(Math.random() * 2500), // Random price up to 25.00
+        });
+      }
+    });
+    
+    return places;
+  }
+}
 
-export const demoTrainProvider: TransportProvider = {
-  name: "Demo rail provider",
-  mode: "train",
-  async search(request) {
-    return [[
-      {
-        mode: "train",
-        origin: `${request.origin.name} city centre`,
-        destination: `${request.destination.name} city centre`,
-        durationMinutes: 510,
-        priceMinor: 9800,
-        currency: request.currency,
-        operator: "Demo Rail",
-        isEstimatedPrice: true,
-      },
-    ]];
-  },
-};
-
-export const demoCoachProvider: TransportProvider = {
-  name: "Demo coach provider",
-  mode: "coach",
-  async search(request) {
-    return [[
-      {
-        mode: "coach",
-        origin: `${request.origin.name} city centre`,
-        destination: `${request.destination.name} city centre`,
-        durationMinutes: 720,
-        priceMinor: 4200,
-        currency: request.currency,
-        operator: "Demo Coach",
-        isEstimatedPrice: true,
-      },
-    ]];
-  },
-};
+export class MockRoutingProvider implements RoutingProvider {
+  async getRoute(origin: LocationInput, destination: LocationInput, mode: TransportMode): Promise<RouteResult> {
+    if (!origin.coordinates || !destination.coordinates) throw new Error("Coordinates required");
+    
+    const distanceKm = getDistanceFromLatLonInKm(
+      origin.coordinates.latitude, origin.coordinates.longitude,
+      destination.coordinates.latitude, destination.coordinates.longitude
+    );
+    
+    // Walking: ~5km/h, Transit: ~20km/h
+    const speedKmh = mode === "walking" ? 5 : 20;
+    const durationMinutes = Math.ceil((distanceKm / speedKmh) * 60);
+    const priceMinor = mode === "walking" ? 0 : Math.ceil(distanceKm * 50); // 0.50 per km for transit
+    
+    return {
+      mode,
+      distanceKm: parseFloat(distanceKm.toFixed(2)),
+      durationMinutes: Math.max(1, durationMinutes),
+      priceMinor
+    };
+  }
+}
