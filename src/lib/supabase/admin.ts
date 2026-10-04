@@ -1,3 +1,5 @@
+import "server-only"; // service role key: never let this module reach a client bundle
+
 import { createClient } from "@supabase/supabase-js";
 
 export function getSupabaseAdmin() {
