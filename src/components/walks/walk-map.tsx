@@ -13,7 +13,8 @@ import {
 import { Flag } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { categoryOf, type LineString, type Poi, type Route, type WalkFile } from "@/lib/walks";
+import { iconFor } from "@/lib/walk-icons";
+import type { LineString, Poi, Route, WalkFile } from "@/lib/walks";
 
 // Served from public/ by scripts/copy-maplibre-worker.mjs (bundlers break MapLibre's own lookup).
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
@@ -35,6 +36,7 @@ const BASEMAP_TINT: [layer: string, property: "background-color" | "fill-color",
 export type RouteKind = "fastest" | "scenic";
 
 type Props = {
+  centre: [lng: number, lat: number]; // initial view, before a walk loads
   walk: WalkFile | null;
   scenic: Route | null;
   selected: RouteKind;
@@ -44,7 +46,7 @@ type Props = {
 const asFeature = (geometry: LineString) => ({ type: "Feature" as const, properties: {}, geometry });
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
-export default function WalkMap({ walk, scenic, selected, pins }: Props) {
+export default function WalkMap({ centre, walk, scenic, selected, pins }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
@@ -52,7 +54,7 @@ export default function WalkMap({ walk, scenic, selected, pins }: Props) {
     const m = new MapLibreMap({
       container: containerRef.current!,
       style: STYLE_URL,
-      center: [9.1875, 45.47],
+      center: centre,
       zoom: 13.5,
       attributionControl: { compact: true },
     });
@@ -89,20 +91,34 @@ export default function WalkMap({ walk, scenic, selected, pins }: Props) {
       setMap(m);
     });
     return () => m.remove();
-  }, []);
+  }, [centre]);
 
-  // Fastest route + framing: whenever the walk changes.
+  // Fastest route: whenever the walk changes.
   useEffect(() => {
-    if (!map || !walk) return;
-    map.getSource<GeoJSONSource>("fastest")?.setData(asFeature(walk.fastest.geometry));
+    if (!map) return;
+    const fastest = walk?.fastest;
+    map.getSource<GeoJSONSource>("fastest")?.setData(fastest ? asFeature(fastest.geometry) : EMPTY);
   }, [map, walk]);
 
   // Scenic route: fade out, swap geometry, fade back in.
   const scenicKey = useRef<LineString | null>(null);
   const selectedRef = useRef(selected); // read by the fade timer, which can outlive a selection change
   useEffect(() => {
-    if (!map || !walk || !scenic) return;
+    if (!map || !walk?.fastest) return;
+    const fastest = walk.fastest;
     const source = map.getSource<GeoJSONSource>("scenic");
+    const frame = (lines: LineString[]) => {
+      const bounds = new LngLatBounds();
+      for (const line of lines) for (const c of line.coordinates) bounds.extend(c);
+      map.fitBounds(bounds, { padding: 56, duration: 600, maxZoom: 16.5 });
+    };
+    if (!scenic) {
+      // No scenic route for this budget yet (pipeline not rerun): show the fastest only.
+      scenicKey.current = null;
+      source?.setData(EMPTY);
+      frame([fastest.geometry]);
+      return;
+    }
     const first = scenicKey.current === null;
     scenicKey.current = scenic.geometry;
     if (first) {
@@ -115,9 +131,7 @@ export default function WalkMap({ walk, scenic, selected, pins }: Props) {
       map.setPaintProperty("scenic", "line-opacity", selectedRef.current === "scenic" ? 1 : 0.35);
     }, first ? 0 : FADE_MS);
 
-    const bounds = new LngLatBounds();
-    for (const c of [...walk.fastest.geometry.coordinates, ...scenic.geometry.coordinates]) bounds.extend(c);
-    map.fitBounds(bounds, { padding: 56, duration: 600, maxZoom: 16.5 });
+    frame([fastest.geometry, scenic.geometry]);
     return () => window.clearTimeout(timer);
   }, [map, walk, scenic]);
 
@@ -146,9 +160,9 @@ export default function WalkMap({ walk, scenic, selected, pins }: Props) {
             </span>
           </MapMarker>
           {pins.map((poi) => {
-            const { label, icon: Icon } = categoryOf(poi);
+            const Icon = iconFor(poi.icon);
             return (
-              <MapMarker key={poi.id} map={map} lng={poi.lng} lat={poi.lat} title={poi.name} subtitle={label}>
+              <MapMarker key={poi.id} map={map} lng={poi.lng} lat={poi.lat} title={poi.name} subtitle={poi.category_label}>
                 <span className="flex size-6 items-center justify-center rounded-full bg-primary text-white ring-2 ring-white shadow-card">
                   <Icon aria-hidden className="size-3.5" strokeWidth={2} />
                 </span>

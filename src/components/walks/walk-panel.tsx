@@ -1,13 +1,12 @@
 import { Flag, MapPin } from "lucide-react";
 import { useId } from "react";
 import {
-  categoryOf,
   formatDistance,
   formatMinutes,
   isSight,
   type Poi,
   type Route,
-  type ScenicRoute,
+  type TimeBudget,
   type WalkFile,
   type WalkPair,
 } from "@/lib/walks";
@@ -26,8 +25,9 @@ export function PlacePickers({
   onChange: (pairId: string) => void;
 }) {
   const current = pairs.find((p) => p.id === pairId)!;
-  const starts = uniqueBy(pairs.map((p) => p.start), (p) => p.id);
-  const ends = uniqueBy(pairs.map((p) => p.end), (p) => p.id);
+  // Places with is_selectable = false stay out of the dropdowns (the current one always shows).
+  const starts = uniqueBy(pairs.map((p) => p.start).filter((p) => p.selectable || p.id === current.start.id), (p) => p.id);
+  const ends = uniqueBy(pairs.map((p) => p.end).filter((p) => p.selectable || p.id === current.end.id), (p) => p.id);
 
   // Only preset walks exist, so each picker jumps to the walk that matches it.
   const pickStart = (id: string) =>
@@ -93,11 +93,11 @@ export function RouteCards({
   onSelect,
 }: {
   fastest: Route;
-  scenic: ScenicRoute;
+  scenic: Route | null; // null when this budget hasn't been computed yet
   selected: RouteKind;
   onSelect: (kind: RouteKind) => void;
 }) {
-  const sameRoute = scenic.extra_pois === 0 && scenic.distance_m === fastest.distance_m;
+  const sameRoute = scenic?.extra_pois === 0 && scenic.distance_m === fastest.distance_m;
   return (
     <div className="mt-6 space-y-3">
       <RouteCard
@@ -107,18 +107,24 @@ export function RouteCards({
         active={selected === "fastest"}
         onClick={() => onSelect("fastest")}
       />
-      <RouteCard
-        title="Most to see"
-        route={scenic}
-        swatch={<span className="block h-[5px] w-6 rounded-full bg-accent" />}
-        active={selected === "scenic"}
-        onClick={() => onSelect("scenic")}
-        chip={
-          sameRoute
-            ? "Same as fastest"
-            : `+${Math.round(scenic.extra_min)} min · ${scenic.extra_pois} more places`
-        }
-      />
+      {scenic ? (
+        <RouteCard
+          title="Most to see"
+          route={scenic}
+          swatch={<span className="block h-[5px] w-6 rounded-full bg-accent" />}
+          active={selected === "scenic"}
+          onClick={() => onSelect("scenic")}
+          chip={
+            sameRoute
+              ? "Same as fastest"
+              : `+${Math.round(scenic.extra_min ?? 0)} min · ${scenic.extra_pois ?? 0} more places`
+          }
+        />
+      ) : (
+        <p className="rounded-card border border-dashed border-line p-4 text-[13px] text-muted">
+          No &ldquo;most to see&rdquo; route for this time yet. Pick another time, or check back soon.
+        </p>
+      )}
     </div>
   );
 }
@@ -171,12 +177,13 @@ export function BudgetSlider({
   value,
   onChange,
 }: {
-  budgets: number[];
+  budgets: TimeBudget[];
   value: number;
   onChange: (budget: number) => void;
 }) {
   const id = useId();
-  const index = budgets.indexOf(value);
+  const index = Math.max(0, budgets.findIndex((b) => b.minutes === value));
+  const current = budgets[index];
   return (
     <div className="mt-6 rounded-card border border-line bg-surface p-5 shadow-card">
       <div className="flex items-baseline justify-between gap-4">
@@ -184,7 +191,7 @@ export function BudgetSlider({
           Extra time I&apos;m happy to add
         </label>
         <output htmlFor={id} className="text-[15px] font-semibold text-primary tabular-nums">
-          +{value} min
+          {current?.label ?? `+${value} min`}
         </output>
       </div>
       <input
@@ -194,14 +201,14 @@ export function BudgetSlider({
         max={budgets.length - 1}
         step={1}
         value={index}
-        onChange={(e) => onChange(budgets[Number(e.target.value)])}
-        aria-valuetext={`${value} extra minutes`}
+        onChange={(e) => onChange(budgets[Number(e.target.value)].minutes)}
+        aria-valuetext={current?.label ?? `${value} extra minutes`}
         className="mt-4 h-11 w-full cursor-pointer accent-primary"
       />
       <div aria-hidden className="-mt-1 flex justify-between text-xs text-muted tabular-nums">
         {budgets.map((b) => (
-          <span key={b} className="w-6 text-center first:text-left last:text-right">
-            {b}
+          <span key={b.minutes} className="w-6 text-center first:text-left last:text-right">
+            {b.minutes}
           </span>
         ))}
       </div>
@@ -219,8 +226,10 @@ export function AlongTheWay({
   poisById: Map<string, Poi>;
 }) {
   const stops = route.poi_ids
-    .map((id, i) => ({ poi: poisById.get(id)!, minute: route.poi_minutes[i] }))
-    .filter(({ poi }) => isSight(poi));
+    .flatMap((id, i) => {
+      const poi = poisById.get(id);
+      return poi && isSight(poi) ? [{ poi, minute: route.poi_minutes[i] }] : [];
+    });
   const others = route.poi_ids.length - stops.length;
 
   return (
@@ -229,7 +238,7 @@ export function AlongTheWay({
       <ol className="mt-3 rounded-card border border-line bg-surface px-4 shadow-card">
         <Stop minute={0} name={walk.start.name} pill="Start" />
         {stops.map(({ poi, minute }) => (
-          <Stop key={poi.id} minute={minute} name={poi.name} pill={categoryOf(poi).label} />
+          <Stop key={poi.id} minute={minute} name={poi.name} pill={poi.category_label} />
         ))}
         <Stop minute={route.duration_min} name={walk.end.name} pill="Arrive" />
       </ol>

@@ -1,24 +1,23 @@
-import {
-  Brush,
-  Camera,
-  Castle,
-  Church,
-  Coffee,
-  Droplets,
-  Eye,
-  Flower2,
-  Landmark,
-  Palette,
-  ShoppingBag,
-  Trees,
-  UtensilsCrossed,
-  Wine,
-  type LucideIcon,
-} from "lucide-react";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 
-// Shapes of the files written by scripts/routing/precompute.py.
+// Shapes returned by the Supabase RPCs get_walk_options() and get_routes()
+// (supabase/migrations/*_scenic_walks.sql). The fallback JSON in
+// public/data/walks/<city>/ is exported from the same RPCs, so it has the same shape.
 
 export type Place = { id: string; name: string; lat: number; lng: number };
+
+export type OptionPlace = Place & { kind: string; selectable: boolean };
+
+export type WalkPair = { id: string; label: string; start: OptionPlace; end: OptionPlace };
+
+export type TimeBudget = { minutes: number; label: string; is_default: boolean };
+
+export type WalkOptions = {
+  city: { id: string; name: string; country: string; centre: [number, number]; bbox: [number, number, number, number] };
+  pairs: WalkPair[];
+  budgets: TimeBudget[];
+  categories: { id: string; label: string; icon: string; weight: number }[];
+};
 
 export type LineString = { type: "LineString"; coordinates: [number, number][] };
 
@@ -26,66 +25,103 @@ export type Route = {
   geometry: LineString;
   distance_m: number;
   duration_min: number;
+  extra_min: number | null;
+  extra_pois: number | null;
+  poi_score: number;
   poi_ids: string[]; // walking order
   poi_minutes: number[]; // minutes from the start, parallel to poi_ids
-  poi_score: number;
 };
 
-export type ScenicRoute = Route & { extra_min: number; extra_pois: number };
-
-export type Poi = { id: string; name: string; category: string; weight: number; lat: number; lng: number };
+export type Poi = {
+  id: string;
+  name: string;
+  category: string;
+  category_label: string;
+  icon: string; // Lucide icon name, see walk-icons.ts
+  weight: number;
+  lat: number;
+  lng: number;
+};
 
 export type WalkFile = {
   id: string;
+  label: string;
   start: Place;
   end: Place;
-  fastest: Route;
-  scenic: Record<string, ScenicRoute>;
+  fastest: Route | null; // null until the pipeline has computed this pair
+  scenic: Record<string, Route>; // keyed by budget minutes
   pois: Poi[];
 };
 
-export type WalkPair = { id: string; start: Place; end: Place };
+/** "live" = read from Supabase; "saved" = the static fallback in public/data/walks. */
+export type DataSource = "live" | "saved";
 
-export type WalkIndex = { pairs: WalkPair[]; budgets: number[] };
+export type Loaded<T> = { data: T; source: DataSource };
 
-const cache = new Map<string, Promise<WalkFile>>();
+const TIMEOUT_MS = 6000;
 
-export function loadWalk(pairId: string): Promise<WalkFile> {
-  let walk = cache.get(pairId);
-  if (!walk) {
-    walk = fetch(`/data/routes/${pairId}.json`).then((res) => {
-      if (!res.ok) throw new Error(`Couldn't load walk ${pairId} (${res.status})`);
-      return res.json() as Promise<WalkFile>;
-    });
-    walk.catch(() => cache.delete(pairId));
-    cache.set(pairId, walk);
+async function rpcOrFallback<T>(
+  fn: string,
+  args: Record<string, unknown>,
+  fallbackUrl: string,
+  isUsable: (data: T | null) => data is T,
+): Promise<Loaded<T>> {
+  const supabase = getSupabaseBrowser();
+  if (supabase) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const { data, error } = await supabase.rpc(fn, args).abortSignal(controller.signal);
+      if (!error && isUsable(data as T | null)) return { data: data as T, source: "live" };
+      if (error) console.warn(`Supabase ${fn} failed, using saved data:`, error.message);
+    } catch (err) {
+      console.warn(`Supabase ${fn} unreachable, using saved data:`, err);
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  return walk;
+  const res = await fetch(fallbackUrl);
+  if (!res.ok) throw new Error("Walk data is unavailable right now");
+  return { data: (await res.json()) as T, source: "saved" };
+}
+
+const cache = new Map<string, Promise<Loaded<unknown>>>();
+
+function cached<T>(key: string, load: () => Promise<Loaded<T>>): Promise<Loaded<T>> {
+  let promise = cache.get(key) as Promise<Loaded<T>> | undefined;
+  if (!promise) {
+    promise = load();
+    promise.catch(() => cache.delete(key));
+    cache.set(key, promise);
+  }
+  return promise;
+}
+
+export function loadWalkOptions(cityId: string): Promise<Loaded<WalkOptions>> {
+  return cached(`options:${cityId}`, () =>
+    rpcOrFallback<WalkOptions>(
+      "get_walk_options",
+      { p_city_id: cityId },
+      `/data/walks/${cityId}/options.json`,
+      (d): d is WalkOptions => !!d && Array.isArray(d.pairs) && d.pairs.length > 0,
+    ),
+  );
+}
+
+/** Fastest route plus the scenic route for every budget, in one call. */
+export function loadWalk(cityId: string, pairId: string): Promise<Loaded<WalkFile>> {
+  return cached(`walk:${pairId}`, () =>
+    rpcOrFallback<WalkFile>(
+      "get_routes",
+      { p_pair_id: pairId },
+      `/data/walks/${cityId}/routes/${pairId}.json`,
+      (d): d is WalkFile => !!d && !!d.fastest,
+    ),
+  );
 }
 
 /** Sights, parks, churches and fountains get pins; cafés and shops only count towards the total. */
 export const isSight = (poi: Poi) => poi.weight >= 2;
-
-const categories: Record<string, { label: string; icon: LucideIcon }> = {
-  attraction: { label: "Landmark", icon: Camera },
-  museum: { label: "Museum", icon: Landmark },
-  gallery: { label: "Gallery", icon: Palette },
-  artwork: { label: "Artwork", icon: Brush },
-  viewpoint: { label: "Viewpoint", icon: Eye },
-  historic: { label: "Historic", icon: Castle },
-  place_of_worship: { label: "Church", icon: Church },
-  fountain: { label: "Fountain", icon: Droplets },
-  park: { label: "Park", icon: Trees },
-  garden: { label: "Garden", icon: Flower2 },
-  cafe: { label: "Café", icon: Coffee },
-  restaurant: { label: "Restaurant", icon: UtensilsCrossed },
-  bar: { label: "Bar", icon: Wine },
-  shop: { label: "Shop", icon: ShoppingBag },
-};
-
-export function categoryOf(poi: Poi) {
-  return categories[poi.category] ?? { label: poi.category, icon: Camera };
-}
 
 export const formatMinutes = (min: number) => `${Math.round(min)} min`;
 
