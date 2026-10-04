@@ -14,7 +14,10 @@ function totalDuration(legs: JourneyLeg[]) {
 
 function journeyType(legs: JourneyLeg[]): Journey["type"] {
   const modes = new Set(legs.map((leg) => leg.mode));
-  if (modes.has("flight")) return modes.size > 1 ? "mixed" : "flight";
+  // Airport transfers are access legs of the flight, not a mixed transport
+  // journey. A true mixed route is only used for journeys combining other
+  // primary modes such as train + coach.
+  if (modes.has("flight")) return "flight";
   if (modes.has("train")) return modes.size > 1 ? "mixed" : "train";
   return modes.size > 1 ? "mixed" : "coach";
 }
