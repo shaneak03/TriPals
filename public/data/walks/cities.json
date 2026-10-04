@@ -1,0 +1,47 @@
+[
+  {
+    "id": "barcelona",
+    "name": "Barcelona",
+    "country": "Spain",
+    "bbox": [
+      2.16,
+      41.375,
+      2.195,
+      41.4
+    ],
+    "centre": [
+      2.176,
+      41.386
+    ]
+  },
+  {
+    "id": "milan",
+    "name": "Milan",
+    "country": "Italy",
+    "bbox": [
+      9.17,
+      45.448,
+      9.2,
+      45.49
+    ],
+    "centre": [
+      9.1875,
+      45.47
+    ]
+  },
+  {
+    "id": "paris",
+    "name": "Paris",
+    "country": "France",
+    "bbox": [
+      2.325,
+      48.845,
+      2.375,
+      48.87
+    ],
+    "centre": [
+      2.348,
+      48.8575
+    ]
+  }
+]

@@ -15,6 +15,7 @@
   --color-accent: #ff7a59;
   --color-accent-hover: #f26d4c;
   --color-accent-tint: #ffe9e2;
+  --color-accent-ink: #a7391e; /* coral text on accent-tint (AA contrast) */
 
   --color-highlight: #ffc857;
   --color-route-fast: #b8c2c9;
@@ -47,6 +48,24 @@ body {
 }
 [data-inview="false"] .route-draw {
   stroke-dashoffset: 1;
+}
+
+/* MapLibre popups, restyled to the card language. */
+.maplibregl-popup-content {
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  box-shadow: 0 12px 32px rgba(30, 42, 50, 0.12);
+}
+.map-popup-title {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--color-ink);
+}
+.map-popup-meta {
+  font-size: 13px;
+  color: var(--color-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { InView } from "../in-view";
 
 // Map drawn in a 560×360 coordinate space; labels are positioned as percentages of it.
@@ -75,9 +76,9 @@ export function WalkPreview() {
           <p className="text-lg leading-relaxed text-muted">
             We score every street for sights, cafés and views, so every walk is worth taking.
           </p>
-          <a href="#" className="inline-flex min-h-11 w-fit items-center font-medium text-primary hover:underline">
+          <Link href="/walks" className="inline-flex min-h-11 w-fit items-center font-medium text-primary hover:underline">
             Try a walk →
-          </a>
+          </Link>
         </div>
       </div>
     </section>

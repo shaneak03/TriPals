@@ -1,0 +1,3 @@
+# Shared routing package (OSM download, scoring, routing, Supabase access).
+-e ../../packages/walkroute
+python-dotenv>=1.0
