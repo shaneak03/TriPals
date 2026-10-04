@@ -41,10 +41,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# routing pipeline: venv, secrets and caches (only the /walks fallback in public/data/walks is committed)
+# routing: venvs, secrets and caches (only the /walks fallback in public/data/walks is committed)
 /scripts/routing/.env
 /scripts/routing/.venv/
-/scripts/routing/cache/
+/services/routing-api/.env
+/services/routing-api/.venv/
+/.cache/
+*.egg-info/
 __pycache__/
 
 # copied from node_modules/maplibre-gl by scripts/copy-maplibre-worker.mjs

@@ -1,26 +1,17 @@
-"""Step 1: download a city's walk network and named points of interest from OSM.
+"""Download a city's walk network and named points of interest from OSM.
 
 The bbox and POI categories (OSM tags + weights) come from Supabase. Writes the raw
 graph, POI geometries and a POI point GeoJSON to cache/<city>/.
 """
 
-import argparse
 import json
 
 import geopandas as gpd
 import osmnx as ox
 import pandas as pd
 
-from config import (
-    BUFFER_DEG,
-    CACHE_DIR,
-    DEDUPE_RADIUS_M,
-    METRIC_CRS,
-    graph_path,
-    pois_cache_path,
-    pois_geojson_path,
-)
-from db import Category, CityConfig, load_city
+from .config import BUFFER_DEG, CACHE_DIR, DEDUPE_RADIUS_M, graph_path, pois_cache_path, pois_geojson_path
+from .db import Category, CityConfig
 
 
 def setup_osmnx():
@@ -85,7 +76,7 @@ def fetch_pois(city: CityConfig):
     pois = gpd.GeoDataFrame(pois[["id", "name", "category", "weight", "highlighted", "geometry"]], crs=raw.crs)
     print(f"  {len(pois):,} named POIs before dedupe")
 
-    pois = dedupe(pois.to_crs(METRIC_CRS))
+    pois = dedupe(pois.to_crs(city.crs))
     print(f"  {len(pois):,} after removing same-name duplicates within {DEDUPE_RADIUS_M} m")
 
     pois.to_file(pois_cache_path(city.id), driver="GPKG")
@@ -134,16 +125,3 @@ def write_geojson(city_id, pois):
     counts = pd.Series([f["properties"]["category"] for f in features]).value_counts()
     print(f"  wrote {len(features):,} POIs -> {path.relative_to(CACHE_DIR)}")
     print(counts.to_string())
-
-
-def main(city_id: str):
-    city = load_city(city_id)
-    setup_osmnx()
-    fetch_graph(city)
-    fetch_pois(city)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--city", default="milan")
-    main(parser.parse_args().city)

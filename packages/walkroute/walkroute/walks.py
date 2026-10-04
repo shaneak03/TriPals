@@ -3,18 +3,18 @@
 Used by run_pipeline.py, which writes the results to Supabase.
 """
 
-from db import Pair
-from routing import nearest_node, plan
+from .db import Pair
+from .routing import CityGraph, plan
 
 
 def place_json(place):
     return {"id": place.slug, "name": place.name, "lat": place.lat, "lng": place.lng}
 
 
-def build_pair(graph, pois_by_id, k, pair: Pair, budgets):
-    source = nearest_node(graph, pair.start.lat, pair.start.lng)
-    target = nearest_node(graph, pair.end.lat, pair.end.lng)
-    fastest, scenic = plan(graph, pois_by_id, source, target, budgets, k)
+def build_pair(cg: CityGraph, pair: Pair, budgets):
+    source, _ = cg.nearest_node(pair.start.lat, pair.start.lng)
+    target, _ = cg.nearest_node(pair.end.lat, pair.end.lng)
+    fastest, scenic = plan(cg, source, target, budgets)
     return {
         "id": pair.id,
         "label": pair.label,

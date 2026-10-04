@@ -31,6 +31,7 @@ Copy the examples and fill them in. Real `.env` files are gitignored; never comm
 | | `SUPABASE_SERVICE_ROLE_KEY` | server-only API routes (`src/lib/supabase/admin.ts`, guarded by `server-only`) |
 | | `DUFFEL_API_TOKEN` | flight search (optional) |
 | `scripts/routing/.env` (from `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | the Python routing pipeline |
+| `services/routing-api/.env` (from `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ROUTING_CITIES`, `ALLOWED_ORIGINS` | the routing API (see `services/routing-api/README.md`) |
 
 The service role key bypasses Row Level Security. It must never get a `NEXT_PUBLIC_` prefix or be imported from client code.
 
@@ -57,7 +58,9 @@ In the Supabase dashboard's SQL Editor, run in order:
 
 1. `supabase/migrations/20261003191500_scenic_walks.sql` (tables, indexes, RLS, read RPCs; enables PostGIS if needed)
 2. `supabase/migrations/20261003203000_replace_pair_routes.sql` (the pipeline's atomic write RPC, service role only)
-3. `supabase/seed.sql` (Milan, POI categories, places, 5 preset walks, budgets 0–30 min). Safe to rerun.
+3. `supabase/migrations/20261004100000_poi_highlighting.sql` (which POIs are pinned and counted as sights)
+4. `supabase/migrations/20261004120000_route_cache.sql` (the routing API's result cache, service role only)
+5. `supabase/seed.sql` (Milan, Paris, Barcelona, POI categories, places, preset walks, budgets 0–30 min). Safe to rerun.
 
 The migrations only create new objects; existing tables are untouched. All walk tables are read-only for `anon`/`authenticated`; only the service role writes.
 
@@ -74,13 +77,17 @@ cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 .venv/bin/python run_pipeline.py --city milan --export-fallback      # also refresh public/data/walks/milan
 ```
 
-A run reads the city's config from Supabase, downloads the OSM walk network and named POIs (`fetch.py`), scores each street by the POIs within 30 m (`score.py`), computes the routes (`routing.py`) and writes them back. It is idempotent: each walk's routes are replaced in one transaction (`replace_pair_routes`), and a full city run also deletes routes of inactive walks and POIs no longer in OSM. The OSM download and scoring are cached in `scripts/routing/cache/<city>/` (gitignored) and redone automatically when the bbox or categories change; `--refresh` forces it. A full run takes about a minute.
+The routing code lives in the shared package `packages/walkroute` (installed into the venv by `requirements.txt`; run `pip install` from `scripts/routing`), which the routing API uses too. A run reads the city's config from Supabase, downloads the OSM walk network and named POIs (`walkroute/fetch.py`), scores each street by the POIs within 30 m (`walkroute/score.py`), computes the routes (`walkroute/routing.py`) and writes them back. It is idempotent: each walk's routes are replaced in one transaction (`replace_pair_routes`), and a full city run also deletes routes of inactive walks and POIs no longer in OSM. The OSM download and scoring are cached in `.cache/walkroute/<city>/` (gitignored, shared with the routing API) and redone automatically when the bbox or categories change; `--refresh` forces it. A full run takes about a minute.
 
 After changing routes, rerun with `--export-fallback` and commit `public/data/walks/` so the offline fallback matches.
 
-**How routes are chosen.** Fastest is the shortest path by length. For each budget (4.8 km/h), scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)` with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes; the winner is the candidate with the highest weighted score of unique POIs within 30 m that fits the budget. The script prints acceptance checks (every route within budget, +0 equals fastest, main walk at +10 min ≥ 2× the POIs) and exits non-zero if one fails.
+**How routes are chosen.** Fastest is the shortest path by length. For each budget (4.8 km/h), scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)` with `k` = median edge length ÷ median non-zero score; every POI category counts towards `poi_score`. Candidates come from a λ sweep (0–2, step 0.1) plus start → via → end routes, searched only inside the ellipse of nodes a walk of that length can reach; the winner is the candidate passing the most highlighted sights (weighted), then the highest overall score, that fits the budget. The script prints acceptance checks (every route within budget, +0 equals fastest, main walk at +10 min ≥ 2× the POIs) and exits non-zero if one fails.
 
-Other scripts: `score.py --city milan` prints street-score stats and the top streets; `routing.py --city milan` prints the main walk at every budget without writing anything.
+`run_pipeline.py --city milan --street-stats` prints street-score stats and the top streets without writing anything.
+
+### 3. Routing API (any start and destination)
+
+`services/routing-api` serves routes between any two points in a loaded city, cached in Supabase `route_cache`. See `services/routing-api/README.md` for running it (`uvicorn app.main:app --port 8000`).
 
 ## Learn More
 

@@ -3,51 +3,31 @@
   python run_pipeline.py --city milan                        # every active pair
   python run_pipeline.py --city milan --pair garibaldi-duomo # just one pair
   python run_pipeline.py --city milan --export-fallback      # also refresh public/data/walks
+  python run_pipeline.py --city milan --street-stats         # print street-score stats, write nothing
 
 Config (bbox, categories, places, pairs, budgets) is read from Supabase. The OSM
-download and street scoring are cached in cache/<city>/ and redone automatically when
+download and street scoring are cached in .cache/walkroute/<city>/ and redone automatically when
 the bbox or POI categories change (or with --refresh). Idempotent: rerunning replaces
 the city's routes, so edits in the dashboard show up on /walks after one run.
 """
 
 import argparse
-import hashlib
 import json
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
-import db
-import fetch
-import score
-from config import CACHE_DIR, DATA_DIR, scored_graph_path
-from precompute import build_pair, check, print_result
-from routing import calibrate_k, load_graph, load_pois_by_id
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")  # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+from walkroute import db, score  # noqa: E402  (needs the env loaded first)
+from walkroute.cache import ensure_scored_graph  # noqa: E402
+from walkroute.config import DATA_DIR  # noqa: E402
+from walkroute.routing import load_city_graph  # noqa: E402
+from walkroute.walks import build_pair, check, print_result  # noqa: E402
 
 FALLBACK_DIR = DATA_DIR / "walks"
-
-
-def inputs_fingerprint(city: db.CityConfig) -> str:
-    """Hash of everything the cached POIs and scored graph depend on."""
-    inputs = {
-        "bbox": city.bbox,
-        "categories": [(c.id, c.osm_tags, c.weight, c.is_highlighted, c.highlight_if_tags) for c in city.categories],
-    }
-    return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
-
-
-def ensure_scored_graph(city: db.CityConfig, refresh: bool) -> None:
-    stamp = CACHE_DIR / city.id / "inputs.sha256"
-    fingerprint = inputs_fingerprint(city)
-    stale = not scored_graph_path(city.id).exists() or not stamp.exists() or stamp.read_text() != fingerprint
-    if not (refresh or stale):
-        print("Using cached OSM data and street scores (bbox and categories unchanged).")
-        return
-    print("Refreshing OSM data and street scores" + (" (--refresh)" if refresh else " (inputs changed)") + "…")
-    fetch.setup_osmnx()
-    fetch.fetch_graph(city)
-    fetch.fetch_pois(city)
-    score.main(city.id, summary=False)
-    stamp.write_text(fingerprint)
 
 
 def route_rows(result) -> list[dict]:
@@ -94,6 +74,7 @@ def main():
     parser.add_argument("--pair", action="append", help="only recompute this pair id (repeatable)")
     parser.add_argument("--refresh", action="store_true", help="re-download OSM data and rescore streets")
     parser.add_argument("--export-fallback", action="store_true", help="write public/data/walks/<city>/ from Supabase")
+    parser.add_argument("--street-stats", action="store_true", help="print street-score stats and exit")
     args = parser.parse_args()
 
     run_started = datetime.now(timezone.utc).isoformat()
@@ -104,18 +85,20 @@ def main():
         if unknown:
             sys.exit(f"Not an active pair in {city.id}: {', '.join(sorted(unknown))}")
         pairs = [p for p in city.pairs if p.id in args.pair]
-    print(f"{city.name}: {len(pairs)} pair(s), budgets {city.budgets}")
+    print(f"{city.name}: {len(pairs)} pair(s), budgets {city.budgets}, CRS {city.crs}")
 
     ensure_scored_graph(city, args.refresh)
-    pois_by_id = load_pois_by_id(city.id)
-    print(f"Upserting {len(pois_by_id):,} POIs…")
-    db.upsert_pois(city.id, list(pois_by_id.values()), run_started)
+    if args.street_stats:
+        score.main(city.id, city.crs, summary=True)
+        return
 
-    graph = load_graph(city.id)
-    k = calibrate_k(graph)
+    cg = load_city_graph(city)
+    print(f"Upserting {len(cg.pois_by_id):,} POIs…")
+    db.upsert_pois(city.id, list(cg.pois_by_id.values()), run_started)
+
     failures = []
     for pair in pairs:
-        result = build_pair(graph, pois_by_id, k, pair, city.budgets)
+        result = build_pair(cg, pair, city.budgets)
         written = db.replace_pair_routes(pair.id, route_rows(result))
         print_result(result)
         print(f"  -> wrote {written} routes")

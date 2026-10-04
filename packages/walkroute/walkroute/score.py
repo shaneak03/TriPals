@@ -1,20 +1,18 @@
-"""Step 2: score every street segment by the points of interest along it.
+"""Score every street segment by the points of interest along it.
 
 Each edge of the walk graph gets:
   poi_ids   – ids of POIs within POI_RADIUS_M of the edge geometry (";"-joined, GraphML stores strings)
   poi_score – sum of those POIs' weights, each POI counted once per edge
 """
 
-import argparse
-
 import geopandas as gpd
 import osmnx as ox
 
-from config import METRIC_CRS, POI_RADIUS_M, graph_path, pois_cache_path, scored_graph_path
+from .config import POI_RADIUS_M, graph_path, pois_cache_path, scored_graph_path
 
 
-def score_edges(graph, pois):
-    edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True).to_crs(METRIC_CRS)
+def score_edges(graph, pois, crs):
+    edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True).to_crs(crs)
     edges = edges.reset_index()[["u", "v", "key", "name", "length", "geometry"]]
 
     # Polygons (parks, the Duomo…) count when the street passes within the radius of their outline.
@@ -76,17 +74,12 @@ def print_summary(edges, hits, pois):
           .head(10)[["street", "length", "poi_score", "per_100m"]].round(0).to_string(index=False))
 
 
-def main(city_id: str, summary: bool = True):
+def main(city_id: str, crs: str, summary: bool = True):
+    """Score the cached walk graph of a city and save it; optionally print sanity-check stats."""
     graph = ox.load_graphml(graph_path(city_id))
-    pois = gpd.read_file(pois_cache_path(city_id)).to_crs(METRIC_CRS)
-    edges, hits = score_edges(graph, pois)
+    pois = gpd.read_file(pois_cache_path(city_id)).to_crs(crs)
+    edges, hits = score_edges(graph, pois, crs)
     ox.save_graphml(graph, scored_graph_path(city_id))
     print(f"Scored {len(edges):,} directed edges -> {scored_graph_path(city_id).name}")
     if summary:
         print_summary(edges, hits, pois)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--city", default="milan")
-    main(parser.parse_args().city)

@@ -1,19 +1,25 @@
 -- Seed data for scenic walks (Milan). Idempotent: rerunning updates rows in place.
 -- Run after all migrations in supabase/migrations/.
 
--- City. The bbox covers Porta Garibaldi, Brera, the Duomo and south to the Darsena.
+-- Cities. Each bbox is kept to a few km (the walk graph is held in memory by the
+-- routing API). location_id links to the journey-search location (read-only lookup).
+--   milan:     Porta Garibaldi, Brera, the Duomo and south to the Darsena
+--   paris:     Louvre, Marais, Île de la Cité and the Latin Quarter
+--   barcelona: Ciutat Vella and the lower Eixample
 insert into public.cities (id, name, country, location_id, bbox, centre, is_active)
-values (
-  'milan', 'Milan', 'Italy',
-  -- Link to the journey-search location row, if one exists (read-only lookup).
-  (select l.id from public.locations l
-    where l.name = 'Milan' and l.location_type = 'city'
-    order by (l.country_code = 'IT') desc nulls last, l.created_at
-    limit 1),
-  extensions.st_makeenvelope(9.170, 45.448, 9.200, 45.490, 4326),
-  extensions.st_setsrid(extensions.st_makepoint(9.1875, 45.470), 4326),
-  true
-)
+select v.id, v.name, v.country,
+       (select l.id from public.locations l
+         where l.name = v.name and l.location_type = 'city'
+         order by (l.country_code = v.country_code) desc nulls last, l.created_at
+         limit 1),
+       extensions.st_makeenvelope(v.west, v.south, v.east, v.north, 4326),
+       extensions.st_setsrid(extensions.st_makepoint(v.lng, v.lat), 4326),
+       true
+from (values
+  ('milan',     'Milan',     'Italy',  'IT', 9.170, 45.448, 9.200, 45.490, 9.1875, 45.470),
+  ('paris',     'Paris',     'France', 'FR', 2.325, 48.845, 2.375, 48.870, 2.3480, 48.8575),
+  ('barcelona', 'Barcelona', 'Spain',  'ES', 2.160, 41.375, 2.195, 41.400, 2.1760, 41.3860)
+) as v(id, name, country, country_code, west, south, east, north, lng, lat)
 on conflict (id) do update set
   name = excluded.name, country = excluded.country, location_id = excluded.location_id,
   bbox = excluded.bbox, centre = excluded.centre, is_active = excluded.is_active;
@@ -44,30 +50,42 @@ on conflict (id) do update set
 
 -- Places a walk can start or end at.
 insert into public.places (slug, city_id, name, location, kind, is_selectable)
-select slug, 'milan', name, extensions.st_setsrid(extensions.st_makepoint(lng, lat), 4326), kind, true
+select slug, city_id, name, extensions.st_setsrid(extensions.st_makepoint(lng, lat), 4326), kind, true
 from (values
-  ('garibaldi-station', 'Hotel by Porta Garibaldi station', 45.4846, 9.1873, 'hotel'),
-  ('porta-garibaldi',   'Porta Garibaldi',                  45.4801, 9.1875, 'landmark'),
-  ('duomo',             'Duomo di Milano',                  45.4641, 9.1900, 'landmark'),
-  ('brera-academy',     'Brera Academy',                    45.4719, 9.1879, 'landmark'),
-  ('pinacoteca-brera',  'Pinacoteca di Brera',              45.4721, 9.1881, 'landmark'),
-  ('castello',          'Castello Sforzesco',               45.4695, 9.1795, 'landmark'),
-  ('galleria',          'Galleria Vittorio Emanuele II',    45.4655, 9.1900, 'landmark'),
-  ('navigli',           'Navigli (Darsena)',                45.4525, 9.1765, 'other')
-) as v(slug, name, lat, lng, kind)
+  ('garibaldi-station',  'milan',     'Hotel by Porta Garibaldi station', 45.4846, 9.1873, 'hotel'),
+  ('porta-garibaldi',    'milan',     'Porta Garibaldi',                  45.4801, 9.1875, 'landmark'),
+  ('duomo',              'milan',     'Duomo di Milano',                  45.4641, 9.1900, 'landmark'),
+  ('brera-academy',      'milan',     'Brera Academy',                    45.4719, 9.1879, 'landmark'),
+  ('pinacoteca-brera',   'milan',     'Pinacoteca di Brera',              45.4721, 9.1881, 'landmark'),
+  ('castello',           'milan',     'Castello Sforzesco',               45.4695, 9.1795, 'landmark'),
+  ('galleria',           'milan',     'Galleria Vittorio Emanuele II',    45.4655, 9.1900, 'landmark'),
+  ('navigli',            'milan',     'Navigli (Darsena)',                45.4525, 9.1765, 'other'),
+  ('louvre',             'paris',     'Louvre (Cour Napoléon)',           48.8606, 2.3376, 'landmark'),
+  ('notre-dame',         'paris',     'Notre-Dame de Paris',              48.8530, 2.3487, 'landmark'),
+  ('place-des-vosges',   'paris',     'Place des Vosges',                 48.8556, 2.3655, 'landmark'),
+  ('pantheon',           'paris',     'Panthéon',                         48.8462, 2.3461, 'landmark'),
+  ('placa-catalunya',    'barcelona', 'Plaça de Catalunya',               41.3870, 2.1700, 'landmark'),
+  ('barceloneta',        'barcelona', 'Barceloneta beach',                41.3790, 2.1890, 'other'),
+  ('casa-batllo',        'barcelona', 'Casa Batlló',                      41.3917, 2.1650, 'landmark'),
+  ('barcelona-cathedral','barcelona', 'Barcelona Cathedral',              41.3840, 2.1762, 'landmark')
+) as v(slug, city_id, name, lat, lng, kind)
 on conflict (slug) do update set
   city_id = excluded.city_id, name = excluded.name, location = excluded.location,
   kind = excluded.kind, is_selectable = excluded.is_selectable;
 
 -- Preset walks. sort_order 1 is the default shown on /walks.
 insert into public.route_pairs (id, city_id, start_place_id, end_place_id, label, sort_order, is_active)
-select v.id, 'milan', s.id, e.id, v.label, v.sort_order, true
+select v.id, s.city_id, s.id, e.id, v.label, v.sort_order, true
 from (values
-  ('garibaldi-duomo',      'garibaldi-station', 'duomo',            'Porta Garibaldi station to the Duomo',      1),
-  ('brera-castello',       'brera-academy',     'castello',         'Brera Academy to Castello Sforzesco',       2),
-  ('duomo-navigli',        'duomo',             'navigli',          'Duomo to the Navigli',                      3),
-  ('castello-galleria',    'castello',          'galleria',         'Castello Sforzesco to the Galleria',        4),
-  ('garibaldi-pinacoteca', 'porta-garibaldi',   'pinacoteca-brera', 'Porta Garibaldi to the Pinacoteca di Brera', 5)
+  ('garibaldi-duomo',       'garibaldi-station', 'duomo',               'Porta Garibaldi station to the Duomo',      1),
+  ('brera-castello',        'brera-academy',     'castello',            'Brera Academy to Castello Sforzesco',       2),
+  ('duomo-navigli',         'duomo',             'navigli',             'Duomo to the Navigli',                      3),
+  ('castello-galleria',     'castello',          'galleria',            'Castello Sforzesco to the Galleria',        4),
+  ('garibaldi-pinacoteca',  'porta-garibaldi',   'pinacoteca-brera',    'Porta Garibaldi to the Pinacoteca di Brera', 5),
+  ('louvre-notre-dame',     'louvre',            'notre-dame',          'The Louvre to Notre-Dame',                  1),
+  ('vosges-pantheon',       'place-des-vosges',  'pantheon',            'Place des Vosges to the Panthéon',          2),
+  ('catalunya-barceloneta', 'placa-catalunya',   'barceloneta',         'Plaça de Catalunya to Barceloneta',         1),
+  ('batllo-cathedral',      'casa-batllo',       'barcelona-cathedral', 'Casa Batlló to the Cathedral',              2)
 ) as v(id, start_slug, end_slug, label, sort_order)
 join public.places s on s.slug = v.start_slug
 join public.places e on e.slug = v.end_slug
