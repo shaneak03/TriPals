@@ -41,6 +41,7 @@ export const demoFlightProvider: TransportProvider = {
           operator: "Demo Airways",
           serviceNumber: "TP101",
           isEstimatedPrice: true,
+          details: { provider: "demo-flight" },
         }]
       : [leg])];
   },
@@ -60,6 +61,7 @@ export const demoTrainProvider: TransportProvider = {
         currency: request.currency,
         operator: "Demo Rail",
         isEstimatedPrice: true,
+        details: { provider: "demo-rail" },
       },
     ]];
   },
@@ -79,6 +81,7 @@ export const demoCoachProvider: TransportProvider = {
         currency: request.currency,
         operator: "Demo Coach",
         isEstimatedPrice: true,
+        details: { provider: "demo-coach" },
       },
     ]];
   },

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { searchJourneys } from "@/lib/journeys/engine";
-import { demoCoachProvider, demoFlightProvider, demoTrainProvider } from "@/lib/journeys/providers";
+import { demoFlightProvider, demoTrainProvider } from "@/lib/journeys/providers";
 import { duffelFlightProvider } from "@/lib/journeys/duffel";
+import { transitousProvider } from "@/lib/journeys/transitous";
 import type { SearchRequest } from "@/lib/journeys/types";
 import { saveJourneySearch } from "@/lib/data/journeys";
 
 const providers = [
   process.env.DUFFEL_API_TOKEN ? duffelFlightProvider : demoFlightProvider,
-  demoTrainProvider,
-  demoCoachProvider,
+  process.env.TRANSITOUS_ENABLED === "true" ? transitousProvider : demoTrainProvider,
 ];
 
 
@@ -37,7 +37,14 @@ export async function POST(request: Request) {
     const journeys = await searchJourneys(searchRequest, providers);
     const saved = await saveJourneySearch(searchRequest, journeys);
     return NextResponse.json({ ...saved, request: searchRequest });
-  } catch {
-    return NextResponse.json({ error: "Unable to search journeys" }, { status: 500 });
+  } catch (error) {
+    console.error("Journey search failed:", error);
+    return NextResponse.json(
+      {
+        error: "Unable to search journeys",
+        details: process.env.NODE_ENV === "development" && error instanceof Error ? error.message : undefined,
+      },
+      { status: 500 },
+    );
   }
 }

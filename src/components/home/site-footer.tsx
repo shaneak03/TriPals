@@ -15,6 +15,9 @@ export function SiteFooter() {
           <div className="col-span-2 flex flex-col gap-3 md:col-span-3 lg:col-span-1">
             <Logo size="sm" />
             <p className="text-sm leading-relaxed text-muted">The true cost and the best walk.</p>
+            <p className="text-xs leading-relaxed text-muted">
+              Public transport routing by <a href="https://transitous.org" target="_blank" rel="noreferrer" className="underline hover:text-ink">Transitous</a>.
+            </p>
           </div>
           {columns.map((col) => (
             <nav key={col.title} aria-label={col.title} className="flex flex-col gap-3">
