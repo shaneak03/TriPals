@@ -13,8 +13,9 @@ import {
 import { Flag } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import type { RoutePoint } from "@/lib/routing-api";
 import { iconFor } from "@/lib/walk-icons";
-import type { LineString, Poi, Route, WalkFile } from "@/lib/walks";
+import type { City, LineString, Poi, Route, WalkFile } from "@/lib/walks";
 
 // Served from public/ by scripts/copy-maplibre-worker.mjs (bundlers break MapLibre's own lookup).
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
@@ -36,28 +37,41 @@ const BASEMAP_TINT: [layer: string, property: "background-color" | "fill-color",
 export type RouteKind = "fastest" | "scenic";
 
 type Props = {
-  centre: [lng: number, lat: number]; // initial view, before a walk loads
+  city: City; // initial view, and where to re-centre when the city changes
   walk: WalkFile | null;
   scenic: Route | null;
   selected: RouteKind;
   pins: Poi[];
+  start: RoutePoint | null;
+  end: RoutePoint | null;
+  /** Map click: sets start, then destination. Omit to disable picking (e.g. live routing offline). */
+  onPick?: (lat: number, lng: number) => void;
+  onMoveStart?: (lat: number, lng: number) => void;
+  onMoveEnd?: (lat: number, lng: number) => void;
 };
 
 const asFeature = (geometry: LineString) => ({ type: "Feature" as const, properties: {}, geometry });
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
-export default function WalkMap({ centre, walk, scenic, selected, pins }: Props) {
+export default function WalkMap({ city, walk, scenic, selected, pins, start, end, onPick, onMoveStart, onMoveEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
+  const initialCity = useRef(city);
+  const pickRef = useRef(onPick);
+  useEffect(() => {
+    pickRef.current = onPick;
+    if (map) map.getCanvas().style.cursor = onPick ? "crosshair" : "";
+  }, [map, onPick]);
 
   useEffect(() => {
     const m = new MapLibreMap({
       container: containerRef.current!,
       style: STYLE_URL,
-      center: centre,
-      zoom: 13.5,
+      bounds: initialCity.current.bbox,
+      fitBoundsOptions: { padding: 24 },
       attributionControl: { compact: true },
     });
+    m.on("click", (e) => pickRef.current?.(e.lngLat.lat, e.lngLat.lng));
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     // "style.load", not "load": "load" waits for every visible tile, so one slow tile
     // request would keep the routes and markers from ever appearing.
@@ -93,7 +107,15 @@ export default function WalkMap({ centre, walk, scenic, selected, pins }: Props)
       setMap(m);
     });
     return () => m.remove();
-  }, [centre]);
+  }, []);
+
+  // Changing city: show the whole city area (the planner clears the walk).
+  const shownCity = useRef(city.id);
+  useEffect(() => {
+    if (!map || shownCity.current === city.id) return;
+    shownCity.current = city.id;
+    map.fitBounds(city.bbox, { padding: 24, duration: 800 });
+  }, [map, city]);
 
   // Fastest route: whenever the walk changes.
   useEffect(() => {
@@ -106,9 +128,14 @@ export default function WalkMap({ centre, walk, scenic, selected, pins }: Props)
   const scenicKey = useRef<LineString | null>(null);
   const selectedRef = useRef(selected); // read by the fade timer, which can outlive a selection change
   useEffect(() => {
-    if (!map || !walk?.fastest) return;
-    const fastest = walk.fastest;
+    if (!map) return;
     const source = map.getSource<GeoJSONSource>("scenic");
+    if (!walk?.fastest) {
+      scenicKey.current = null;
+      source?.setData(EMPTY);
+      return;
+    }
+    const fastest = walk.fastest;
     const frame = (lines: LineString[]) => {
       const bounds = new LngLatBounds();
       for (const line of lines) for (const c of line.coordinates) bounds.extend(c);
@@ -151,16 +178,8 @@ export default function WalkMap({ centre, walk, scenic, selected, pins }: Props)
     <div className="size-full">
       {/* MapLibre forces position: relative on this element, so size it directly. */}
       <div ref={containerRef} className="size-full" />
-      {map && walk && (
+      {map && (
         <>
-          <MapMarker map={map} lng={walk.start.lng} lat={walk.start.lat} title={walk.start.name} subtitle="Start">
-            <span className="block size-[18px] rounded-full border-[5px] border-ink bg-white shadow-card" />
-          </MapMarker>
-          <MapMarker map={map} lng={walk.end.lng} lat={walk.end.lat} title={walk.end.name} subtitle="Destination">
-            <span className="flex size-8 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white shadow-card">
-              <Flag aria-hidden className="size-4" strokeWidth={1.75} />
-            </span>
-          </MapMarker>
           {pins.map((poi) => {
             const Icon = iconFor(poi.icon);
             return (
@@ -171,6 +190,19 @@ export default function WalkMap({ centre, walk, scenic, selected, pins }: Props)
               </MapMarker>
             );
           })}
+          {/* Start and destination after the pins so they sit on top; drag to move. */}
+          {start && (
+            <MapMarker map={map} lng={start.lng} lat={start.lat} title={start.name} subtitle="Start" onDragEnd={onMoveStart}>
+              <span className="block size-[18px] rounded-full border-[5px] border-ink bg-white shadow-card" />
+            </MapMarker>
+          )}
+          {end && (
+            <MapMarker map={map} lng={end.lng} lat={end.lat} title={end.name} subtitle="Destination" onDragEnd={onMoveEnd}>
+              <span className="flex size-8 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white shadow-card">
+                <Flag aria-hidden className="size-4" strokeWidth={1.75} />
+              </span>
+            </MapMarker>
+          )}
         </>
       )}
     </div>
@@ -185,6 +217,7 @@ function MapMarker({
   title,
   subtitle,
   children,
+  onDragEnd,
 }: {
   map: MapLibreMap;
   lng: number;
@@ -192,9 +225,16 @@ function MapMarker({
   title: string;
   subtitle: string;
   children: ReactNode;
+  /** Makes the marker draggable; called with the drop position. */
+  onDragEnd?: (lat: number, lng: number) => void;
 }) {
   // Only ever rendered client-side, after the map has loaded.
   const [element] = useState(() => document.createElement("div"));
+  const dragRef = useRef(onDragEnd);
+  useEffect(() => {
+    dragRef.current = onDragEnd;
+  }, [onDragEnd]);
+  const draggable = !!onDragEnd;
 
   useEffect(() => {
     const content = document.createElement("div");
@@ -205,17 +245,27 @@ function MapMarker({
     meta.className = "map-popup-meta";
     meta.textContent = subtitle;
 
-    const marker = new Marker({ element })
-      .setLngLat([lng, lat])
-      .setPopup(new Popup({ offset: 16, closeButton: false, maxWidth: "240px" }).setDOMContent(content))
-      .addTo(map);
+    const marker = new Marker({ element, draggable }).setLngLat([lng, lat]);
+    if (draggable) {
+      marker.on("dragend", () => {
+        const { lat: newLat, lng: newLng } = marker.getLngLat();
+        dragRef.current?.(newLat, newLng);
+      });
+    } else {
+      marker.setPopup(new Popup({ offset: 16, closeButton: false, maxWidth: "240px" }).setDOMContent(content));
+    }
+    marker.addTo(map);
     return () => {
       marker.remove();
     };
-  }, [map, element, lng, lat, title, subtitle]);
+  }, [map, element, lng, lat, title, subtitle, draggable]);
 
   return createPortal(
-    <button type="button" aria-label={`${title} (${subtitle})`} className="block cursor-pointer">
+    <button
+      type="button"
+      aria-label={draggable ? `${subtitle}: ${title}. Drag to move.` : `${title} (${subtitle})`}
+      className={`block ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+    >
       {children}
     </button>,
     element,

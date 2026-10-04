@@ -66,6 +66,20 @@ def export_fallback(city: db.CityConfig) -> None:
         if stale.name not in keep:
             stale.unlink()
     print(f"Exported fallback for {len(keep)} pairs -> {out.relative_to(DATA_DIR.parent.parent)}")
+    export_city_list()
+
+
+def export_city_list() -> None:
+    """public/data/walks/cities.json: the city selector's fallback (same shape as the web app's City)."""
+    rows = db.client().table("cities").select("id, name, country, bbox, centre").eq("is_active", True).order("name").execute().data
+    cities = []
+    for r in rows:
+        ring = r["bbox"]["coordinates"][0]
+        xs, ys = [c[0] for c in ring], [c[1] for c in ring]
+        cities.append({"id": r["id"], "name": r["name"], "country": r["country"],
+                       "bbox": [min(xs), min(ys), max(xs), max(ys)], "centre": r["centre"]["coordinates"]})
+    (FALLBACK_DIR / "cities.json").write_text(json.dumps(cities, ensure_ascii=False, indent=2))
+    print(f"Exported {len(cities)} cities -> public/data/walks/cities.json")
 
 
 def main():

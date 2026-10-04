@@ -1,4 +1,4 @@
-import { Flag, MapPin } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { useId } from "react";
 import {
   countSights,
@@ -7,41 +7,64 @@ import {
   isSight,
   type Poi,
   type Route,
+  type City,
   type TimeBudget,
-  type WalkFile,
   type WalkPair,
 } from "@/lib/walks";
 import type { RouteKind } from "./walk-map";
 
-const uniqueBy = <T,>(items: T[], key: (item: T) => string) =>
-  [...new Map(items.map((item) => [key(item), item])).values()];
-
-export function PlacePickers({
-  pairs,
-  pairId,
+export function CitySelect({
+  cities,
+  value,
   onChange,
 }: {
-  pairs: WalkPair[];
-  pairId: string;
-  onChange: (pairId: string) => void;
+  cities: City[];
+  value: string;
+  onChange: (cityId: string) => void;
 }) {
-  const current = pairs.find((p) => p.id === pairId)!;
-  // Places with is_selectable = false stay out of the dropdowns (the current one always shows).
-  const starts = uniqueBy(pairs.map((p) => p.start).filter((p) => p.selectable || p.id === current.start.id), (p) => p.id);
-  const ends = uniqueBy(pairs.map((p) => p.end).filter((p) => p.selectable || p.id === current.end.id), (p) => p.id);
-
-  // Only preset walks exist, so each picker jumps to the walk that matches it.
-  const pickStart = (id: string) =>
-    onChange((pairs.find((p) => p.start.id === id && p.end.id === current.end.id) ?? pairs.find((p) => p.start.id === id))!.id);
-  const pickEnd = (id: string) =>
-    onChange((pairs.find((p) => p.end.id === id && p.start.id === current.start.id) ?? pairs.find((p) => p.end.id === id))!.id);
-
   return (
-    <div className="mt-6 space-y-2">
-      <PlaceSelect label="Start" icon={<MapPin aria-hidden className="size-5" strokeWidth={1.75} />}
-        value={current.start.id} options={starts} onChange={pickStart} />
-      <PlaceSelect label="Destination" icon={<Flag aria-hidden className="size-5" strokeWidth={1.75} />}
-        value={current.end.id} options={ends} onChange={pickEnd} />
+    <PlaceSelect
+      label="City"
+      icon={<Building2 aria-hidden className="size-5" strokeWidth={1.75} />}
+      value={value}
+      options={cities.map((c) => ({ id: c.id, name: `${c.name}, ${c.country}` }))}
+      onChange={onChange}
+    />
+  );
+}
+
+/** Preset walks as chips; picking one fills both start and destination. */
+export function SuggestedWalks({
+  pairs,
+  activeId,
+  onPick,
+}: {
+  pairs: WalkPair[];
+  activeId: string | null;
+  onPick: (pair: WalkPair) => void;
+}) {
+  if (!pairs.length) return null;
+  return (
+    <div className="mt-4">
+      <h2 className="mb-2 text-[13px] text-muted">Suggested walks</h2>
+      <div className="flex flex-wrap gap-2">
+        {pairs.map((pair) => {
+          const active = pair.id === activeId;
+          return (
+            <button
+              key={pair.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onPick(pair)}
+              className={`min-h-9 rounded-full px-3.5 py-1.5 text-left text-[13px] leading-tight transition-colors ${
+                active ? "bg-primary text-white" : "bg-primary-tint text-ink hover:bg-primary-tint/70"
+              }`}
+            >
+              {pair.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -229,11 +252,13 @@ export function BudgetSlider({
 }
 
 export function AlongTheWay({
-  walk,
+  startName,
+  endName,
   route,
   poisById,
 }: {
-  walk: WalkFile;
+  startName: string;
+  endName: string;
   route: Route;
   poisById: Map<string, Poi>;
 }) {
@@ -248,11 +273,11 @@ export function AlongTheWay({
     <section className="mt-8">
       <h2 className="text-lg font-medium text-ink">Along the way</h2>
       <ol className="mt-3 rounded-card border border-line bg-surface px-4 shadow-card">
-        <Stop minute={0} name={walk.start.name} pill="Start" />
+        <Stop minute={0} name={startName} pill="Start" />
         {stops.map(({ poi, minute }) => (
           <Stop key={poi.id} minute={minute} name={poi.name} pill={poi.category_label} />
         ))}
-        <Stop minute={route.duration_min} name={walk.end.name} pill="Arrive" />
+        <Stop minute={route.duration_min} name={endName} pill="Arrive" />
       </ol>
       {others > 0 && (
         <p className="mt-3 px-1 text-[13px] text-muted">

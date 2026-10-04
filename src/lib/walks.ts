@@ -45,13 +45,21 @@ export type Poi = {
 };
 
 export type WalkFile = {
-  id: string;
-  label: string;
+  id: string | null; // pair id for suggested walks; null for live routes
+  label: string | null;
   start: Place;
   end: Place;
   fastest: Route | null; // null until the pipeline has computed this pair
   scenic: Record<string, Route>; // keyed by budget minutes
   pois: Poi[];
+};
+
+export type City = {
+  id: string;
+  name: string;
+  country: string;
+  bbox: [number, number, number, number]; // west, south, east, north
+  centre: [number, number]; // lng, lat
 };
 
 /** "live" = read from Supabase; "saved" = the static fallback in public/data/walks. */
@@ -96,6 +104,51 @@ function cached<T>(key: string, load: () => Promise<Loaded<T>>): Promise<Loaded<
     cache.set(key, promise);
   }
   return promise;
+}
+
+type CityRow = {
+  id: string;
+  name: string;
+  country: string;
+  bbox: { coordinates: [number, number][][] };
+  centre: { coordinates: [number, number] };
+};
+
+/** Active cities from Supabase (PostGIS columns arrive as GeoJSON), or the saved list. */
+export function loadCities(): Promise<Loaded<City[]>> {
+  return cached("cities", async () => {
+    const supabase = getSupabaseBrowser();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("cities")
+          .select("id, name, country, bbox, centre")
+          .eq("is_active", true)
+          .order("name")
+          .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
+        if (!error && data?.length) {
+          const cities = (data as CityRow[]).map((row) => {
+            const ring = row.bbox.coordinates[0];
+            const xs = ring.map((c) => c[0]);
+            const ys = ring.map((c) => c[1]);
+            return {
+              id: row.id,
+              name: row.name,
+              country: row.country,
+              bbox: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as City["bbox"],
+              centre: row.centre.coordinates,
+            };
+          });
+          return { data: cities, source: "live" as const };
+        }
+      } catch (err) {
+        console.warn("Supabase cities unreachable, using saved list:", err);
+      }
+    }
+    const res = await fetch("/data/walks/cities.json");
+    if (!res.ok) throw new Error("Walk data is unavailable right now");
+    return { data: (await res.json()) as City[], source: "saved" as const };
+  });
 }
 
 export function loadWalkOptions(cityId: string): Promise<Loaded<WalkOptions>> {

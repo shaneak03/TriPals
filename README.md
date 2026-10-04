@@ -28,6 +28,7 @@ Copy the examples and fill them in. Real `.env` files are gitignored; never comm
 |---|---|---|
 | `.env.local` (from `.env.example`) | `NEXT_PUBLIC_SUPABASE_URL` | browser + server |
 | | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser (read-only through Row Level Security) |
+| | `NEXT_PUBLIC_ROUTING_API_URL` | browser: the routing API for free start/destination walks (e.g. `http://localhost:8000`) |
 | | `SUPABASE_SERVICE_ROLE_KEY` | server-only API routes (`src/lib/supabase/admin.ts`, guarded by `server-only`) |
 | | `DUFFEL_API_TOKEN` | flight search (optional) |
 | `scripts/routing/.env` (from `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | the Python routing pipeline |
@@ -37,7 +38,7 @@ The service role key bypasses Row Level Security. It must never get a `NEXT_PUBL
 
 ## Scenic walks (`/walks`)
 
-`/walks` compares the fastest walk between two places with a "most to see" route that passes more points of interest within an extra-time budget. Everything it shows lives in Supabase:
+`/walks` compares the fastest walk between two places with a "most to see" route that passes more sights within an extra-time budget. Pick a city, then any start and destination: search (Photon autocomplete, limited to the city), or click the map (first click = start, second = destination; markers are draggable). Suggested walks fill both fields with a precomputed route. Free routes come from the routing API (`services/routing-api`); if it is unreachable, or a city isn't loaded there, the page offers the suggested walks only. Everything else lives in Supabase:
 
 | Table | What it holds | Edit it to… |
 |---|---|---|
@@ -50,7 +51,7 @@ The service role key bypasses Row Level Security. It must never get a `NEXT_PUBL
 
 Labels, ordering, `is_active` and `is_selectable` changes show up on the next page load. Anything that changes routes (weights, OSM tags, bbox, new pairs or budgets) needs a pipeline run. Category icons must be one of the names in `src/lib/walk-icons.ts`; anything else shows a map pin.
 
-The page reads through two RPCs that return plain JSON (GeoJSON geometry): `get_walk_options(city_id)` and `get_routes(pair_id[, budget_min])`. If Supabase is unreachable, it falls back to the static copy in `public/data/walks/<city>/` and says so.
+The page reads the `cities` table and two RPCs that return plain JSON (GeoJSON geometry): `get_walk_options(city_id)` and `get_routes(pair_id[, budget_min])`. If Supabase is unreachable, it falls back to the static copy in `public/data/walks/` (`cities.json`, `<city>/options.json`, `<city>/routes/*.json`) and says so.
 
 ### 1. Database setup (once)
 
