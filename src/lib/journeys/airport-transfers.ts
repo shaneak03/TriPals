@@ -1,6 +1,10 @@
 import { getAirportByCode } from "@/lib/data/transport-hubs";
 import { getAirportTransferEstimate } from "@/lib/data/airport-transfer-estimates";
 import { convertMinorUnits } from "@/lib/currency";
+
+// Keep the Transitous integration available for later, but use the fast
+// Supabase estimates during the hackathon search flow.
+const ENABLE_TRANSITOUS_AIRPORT_TRANSFERS = false;
 import type { JourneyLeg, LocationInput } from "./types";
 
 type TransitousLeg = {
@@ -71,10 +75,6 @@ async function routeTransfer(
     numItineraries: "1",
     maxItineraries: "1",
   });
-  const response = await fetch(`https://api.transitous.org/api/v6/plan?${params}`, {
-    headers: { Accept: "application/json", "User-Agent": "TriPals/0.1 (hackathon prototype)" },
-    signal: AbortSignal.timeout(15000),
-  });
   const requestDebug = {
     fromPlace: params.get("fromPlace"),
     toPlace: params.get("toPlace"),
@@ -82,6 +82,22 @@ async function routeTransfer(
     arriveBy: params.get("arriveBy"),
     maxTransfers: params.get("maxTransfers"),
   };
+  let response: Response;
+  try {
+    response = await fetch(`https://api.transitous.org/api/v6/plan?${params}`, {
+      headers: { Accept: "application/json", "User-Agent": "TriPals/0.1 (hackathon prototype)" },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    return {
+      legs: [] as JourneyLeg[],
+      debug: {
+        ...requestDebug,
+        status: "timeout",
+        body: error instanceof Error ? error.message : "Transitous request failed",
+      },
+    };
+  }
   if (!response.ok) return { legs: [] as JourneyLeg[], debug: { ...requestDebug, status: response.status, body: (await response.text()).slice(0, 300) } };
   const payload = (await response.json()) as TransitousResponse;
   const legs = payload.itineraries?.[0]?.legs ?? [];
@@ -142,10 +158,15 @@ export async function addTransitousAirportTransfers(legs: JourneyLeg[], origin: 
     departureAirportCoordinatesFound: Boolean(departureCoords),
     arrivalAirportCoordinatesFound: Boolean(arrivalCoords),
   };
-  const [toAirport, fromAirport] = await Promise.all([
-    routeTransfer(originCoords, departureCoords, departureTime, currency, true),
-    routeTransfer(arrivalCoords, destinationCoords, arrivalTime, currency, false),
-  ]);
+  const [toAirport, fromAirport] = ENABLE_TRANSITOUS_AIRPORT_TRANSFERS
+    ? await Promise.all([
+      routeTransfer(originCoords, departureCoords, departureTime, currency, true),
+      routeTransfer(arrivalCoords, destinationCoords, arrivalTime, currency, false),
+    ])
+    : [
+      { legs: [] as JourneyLeg[], debug: { status: "disabled" } },
+      { legs: [] as JourneyLeg[], debug: { status: "disabled" } },
+    ];
   const [departureEstimate, arrivalEstimate] = await Promise.all([
     getAirportTransferEstimate(details?.originAirportCode, origin.code, "to_airport", currency),
     getAirportTransferEstimate(details?.destinationAirportCode, destination.code, "from_airport", currency),

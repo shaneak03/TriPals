@@ -85,9 +85,26 @@ export function Hero() {
         }),
       });
 
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Search failed");
-      setJourneys(payload.journeys ?? []);
+      if (!response.ok || !response.body) throw new Error("Search failed");
+      setJourneys([]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const message = JSON.parse(line) as { type: string; journeys?: Journey[]; error?: string };
+          if (message.type === "journeys") {
+            setJourneys((current) => sortJourneys([...current, ...(message.journeys ?? [])]));
+          }
+          if (message.type === "error") throw new Error(message.error ?? "Search failed");
+        }
+      }
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : "Search failed");
       setJourneys([]);
@@ -238,6 +255,14 @@ function JourneyResults({ journeys, currency }: { journeys: Journey[]; currency:
       ))}
     </div>
   );
+}
+
+function sortJourneys(journeys: Journey[]) {
+  return journeys.sort((a, b) => {
+    if (a.priceUnavailable !== b.priceUnavailable) return a.priceUnavailable ? 1 : -1;
+    if (!a.priceUnavailable && a.totalPriceMinor !== b.totalPriceMinor) return a.totalPriceMinor - b.totalPriceMinor;
+    return a.totalDurationMinutes - b.totalDurationMinutes;
+  });
 }
 
 function currencySymbol(currency: string) {
