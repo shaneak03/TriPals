@@ -59,7 +59,9 @@ export default function WalkMap({ centre, walk, scenic, selected, pins }: Props)
       attributionControl: { compact: true },
     });
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
-    m.on("load", () => {
+    // "style.load", not "load": "load" waits for every visible tile, so one slow tile
+    // request would keep the routes and markers from ever appearing.
+    m.once("style.load", () => {
       for (const [layer, property, color] of BASEMAP_TINT) {
         if (m.getLayer(layer)) m.setPaintProperty(layer, property, color);
       }

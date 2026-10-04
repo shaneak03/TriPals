@@ -1,7 +1,7 @@
 """Step 1: download a city's walk network and named points of interest from OSM.
 
 The bbox and POI categories (OSM tags + weights) come from Supabase. Writes the raw
-graph and POI geometries to cache/<city>/ and a point GeoJSON to public/data/.
+graph, POI geometries and a POI point GeoJSON to cache/<city>/.
 """
 
 import argparse
@@ -128,7 +128,7 @@ def write_geojson(city_id, pois):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False))
     counts = pd.Series([f["properties"]["category"] for f in features]).value_counts()
-    print(f"  wrote {len(features):,} POIs -> {path.relative_to(path.parents[2])}")
+    print(f"  wrote {len(features):,} POIs -> {path.relative_to(CACHE_DIR)}")
     print(counts.to_string())
 
 

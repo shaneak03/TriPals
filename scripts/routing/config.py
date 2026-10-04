@@ -5,8 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = Path(__file__).resolve().parent / "cache"  # raw OSM downloads, gitignored
-DATA_DIR = ROOT / "public" / "data"
-ROUTES_DIR = DATA_DIR / "routes"
+DATA_DIR = ROOT / "public" / "data"  # only the static fallback for /walks (see run_pipeline --export-fallback)
 
 
 def graph_path(city_id: str) -> Path:
@@ -22,7 +21,7 @@ def pois_cache_path(city_id: str) -> Path:
 
 
 def pois_geojson_path(city_id: str) -> Path:
-    return DATA_DIR / f"{city_id}_pois.geojson"  # points, shipped to the frontend
+    return CACHE_DIR / city_id / "pois.geojson"  # points; the pipeline upserts these into Supabase
 
 
 # Extra margin when downloading so streets crossing the bbox edge are complete.

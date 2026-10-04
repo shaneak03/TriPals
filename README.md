@@ -18,41 +18,69 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [Outfit](https://fonts.google.com/specimen/Outfit). `npm run dev` and `npm run build` first copy MapLibre's web worker into `public/maplibre/` (gitignored), which the `/walks` map needs.
 
-## Walk routing data (Milan)
+## Environment variables
 
-The `/walks` planner uses data precomputed offline from OpenStreetMap, so the demo never calls a live API. The pipeline lives in `scripts/routing/` (settings in `config.py`). Outputs in `public/data/` are committed; raw OSM downloads go to `scripts/routing/cache/` (gitignored).
+Copy the examples and fill them in. Real `.env` files are gitignored; never commit keys.
+
+| File | Variable | Used by |
+|---|---|---|
+| `.env.local` (from `.env.example`) | `NEXT_PUBLIC_SUPABASE_URL` | browser + server |
+| | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser (read-only through Row Level Security) |
+| | `SUPABASE_SERVICE_ROLE_KEY` | server-only API routes (`src/lib/supabase/admin.ts`, guarded by `server-only`) |
+| | `DUFFEL_API_TOKEN` | flight search (optional) |
+| `scripts/routing/.env` (from `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | the Python routing pipeline |
+
+The service role key bypasses Row Level Security. It must never get a `NEXT_PUBLIC_` prefix or be imported from client code.
+
+## Scenic walks (`/walks`)
+
+`/walks` compares the fastest walk between two places with a "most to see" route that passes more points of interest within an extra-time budget. Everything it shows lives in Supabase:
+
+| Table | What it holds | Edit it to… |
+|---|---|---|
+| `cities` | bbox, centre, `is_active`, optional link to `locations` | change the area covered (rerun pipeline) |
+| `poi_categories` | OSM tags, weight, label, Lucide icon | re-weight or relabel categories (rerun pipeline for weights/tags) |
+| `places` | named start/end points, `is_selectable` for the dropdowns | add or move start/end points |
+| `route_pairs` | preset walks, label, `sort_order`, `is_active` | add, relabel, reorder or hide walks (rerun pipeline for new pairs) |
+| `time_budgets` | slider steps, labels, `is_default` | change the slider (rerun pipeline for new budgets) |
+| `pois`, `routes`, `route_pois` | pipeline output | — (written by the pipeline only) |
+
+Labels, ordering, `is_active` and `is_selectable` changes show up on the next page load. Anything that changes routes (weights, OSM tags, bbox, new pairs or budgets) needs a pipeline run. Category icons must be one of the names in `src/lib/walk-icons.ts`; anything else shows a map pin.
+
+The page reads through two RPCs that return plain JSON (GeoJSON geometry): `get_walk_options(city_id)` and `get_routes(pair_id[, budget_min])`. If Supabase is unreachable, it falls back to the static copy in `public/data/walks/<city>/` and says so.
+
+### 1. Database setup (once)
+
+In the Supabase dashboard's SQL Editor, run in order:
+
+1. `supabase/migrations/20261003191500_scenic_walks.sql` (tables, indexes, RLS, read RPCs; enables PostGIS if needed)
+2. `supabase/migrations/20261003203000_replace_pair_routes.sql` (the pipeline's atomic write RPC, service role only)
+3. `supabase/seed.sql` (Milan, POI categories, places, 5 preset walks, budgets 0–30 min). Safe to rerun.
+
+The migrations only create new objects; existing tables are untouched. All walk tables are read-only for `anon`/`authenticated`; only the service role writes.
+
+### 2. Routing pipeline (Python)
 
 ```bash
 cd scripts/routing
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 
-.venv/bin/python fetch.py   # walk network + named POIs -> public/data/milan_pois.geojson
+.venv/bin/python run_pipeline.py --city milan                        # every active walk
+.venv/bin/python run_pipeline.py --city milan --pair garibaldi-duomo # just one walk
+.venv/bin/python run_pipeline.py --city milan --export-fallback      # also refresh public/data/walks/milan
 ```
 
-`fetch.py` downloads the walk network for the bounding box in `config.py` (plus a ~300 m buffer) and every named POI matching `POI_RULES`. POI weights are 3 for tourism sights and historic features, 2 for places of worship, fountains, parks and gardens, and 1 for cafés, restaurants, bars and shops. Same-name POIs less than 15 m apart are merged. HTTP responses are cached, so reruns are fast; delete `cache/` to force a fresh download.
+A run reads the city's config from Supabase, downloads the OSM walk network and named POIs (`fetch.py`), scores each street by the POIs within 30 m (`score.py`), computes the routes (`routing.py`) and writes them back. It is idempotent: each walk's routes are replaced in one transaction (`replace_pair_routes`), and a full city run also deletes routes of inactive walks and POIs no longer in OSM. The OSM download and scoring are cached in `scripts/routing/cache/<city>/` (gitignored) and redone automatically when the bbox or categories change; `--refresh` forces it. A full run takes about a minute.
 
-```bash
-.venv/bin/python score.py   # cache/milan_walk_scored.graphml + summary stats
-```
+After changing routes, rerun with `--export-fallback` and commit `public/data/walks/` so the offline fallback matches.
 
-`score.py` projects the graph and POIs to EPSG:32632 (metres) and tags each edge with `poi_ids` (POIs within 30 m of the edge, `;`-separated) and `poi_score` (the sum of their weights). Parks and buildings count when the street passes within 30 m of their outline. It prints the share of scored segments and the top streets so you can sanity-check the weights.
+**How routes are chosen.** Fastest is the shortest path by length. For each budget (4.8 km/h), scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)` with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes; the winner is the candidate with the highest weighted score of unique POIs within 30 m that fits the budget. The script prints acceptance checks (every route within budget, +0 equals fastest, main walk at +10 min ≥ 2× the POIs) and exits non-zero if one fails.
 
-```bash
-.venv/bin/python routing.py  # demo: Porta Garibaldi -> Duomo at every budget
-```
-
-`routing.py` computes the fastest route (shortest by length) and, for each extra-time budget at 4.8 km/h, a "most to see" route. Scenic edge cost is `max(length − λ·poi_score·k, 0.05·length)`, with `k` = median edge length ÷ median non-zero score. Candidates come from a λ sweep (0–5, step 0.1) plus start → via → end routes for λ ∈ {0, 0.3, 0.6, 1}; via routes are needed because large λ pushes every scored edge onto the cost floor, so the sweep alone stops adding detours. For each budget the winner is the candidate with the highest weighted score of unique POIs within 30 m whose length fits the budget (ties: more POIs, then shorter).
-
-```bash
-.venv/bin/python precompute.py  # -> public/data/routes/<pair_id>.json + index.json
-```
-
-`precompute.py` runs every preset pair in `config.py` (`PLACES`, `PAIRS`) at budgets 0, 5, 10, 15, 20 and 30 min. Each file holds `start`, `end`, `fastest`, `scenic` (keyed by budget) and the `pois` those routes pass. A route has a GeoJSON `geometry`, `distance_m`, `duration_min`, `poi_ids` in walking order with matching `poi_minutes`, and `poi_score`; scenic routes add `extra_min` and `extra_pois`. It then checks the acceptance criteria (every scenic route within budget, +0 equals fastest, main pair at +10 min ≥ 2× the POIs) and exits non-zero if one fails.
-
-Full rerun after changing weights or the bbox: `fetch.py`, `score.py`, `precompute.py` (about a minute with a warm cache).
+Other scripts: `score.py --city milan` prints street-score stats and the top streets; `routing.py --city milan` prints the main walk at every budget without writing anything.
 
 ## Learn More
 
