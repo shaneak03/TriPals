@@ -50,11 +50,14 @@ def matches(category: Category, row) -> bool:
 
 
 def classify(row, categories: list[Category]):
-    """(category id, weight) of the highest-weight category the feature matches."""
+    """(category id, weight, highlighted) for the highest-weight category the feature matches."""
     for category in categories:  # sorted highest weight first
         if matches(category, row):
-            return category.id, category.weight
-    return None, 0
+            highlighted = category.is_highlighted or any(
+                isinstance(row.get(tag), str) and row.get(tag).strip() for tag in category.highlight_if_tags
+            )
+            return category.id, category.weight, highlighted
+    return None, 0, False
 
 
 def overpass_tags(categories: list[Category]) -> dict:
@@ -75,11 +78,11 @@ def fetch_pois(city: CityConfig):
 
     raw = raw[raw["name"].notna() & (raw["name"].str.strip() != "")]
     classified = raw.apply(classify, axis=1, result_type="expand", categories=city.categories)
-    raw["category"], raw["weight"] = classified[0], classified[1]
+    raw["category"], raw["weight"], raw["highlighted"] = classified[0], classified[1], classified[2].astype(bool)
     pois = raw[raw["weight"] > 0].copy()
     pois["id"] = pois["element"] + "/" + pois["id"].astype(str)
     pois["name"] = pois["name"].str.strip()
-    pois = gpd.GeoDataFrame(pois[["id", "name", "category", "weight", "geometry"]], crs=raw.crs)
+    pois = gpd.GeoDataFrame(pois[["id", "name", "category", "weight", "highlighted", "geometry"]], crs=raw.crs)
     print(f"  {len(pois):,} named POIs before dedupe")
 
     pois = dedupe(pois.to_crs(METRIC_CRS))
@@ -118,6 +121,7 @@ def write_geojson(city_id, pois):
                 "name": p.name,
                 "category": p.category,
                 "weight": int(p.weight),
+                "highlighted": bool(p.highlighted),
                 "lat": round(p.geometry.y, 6),
                 "lng": round(p.geometry.x, 6),
             },

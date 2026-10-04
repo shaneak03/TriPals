@@ -30,7 +30,7 @@ def inputs_fingerprint(city: db.CityConfig) -> str:
     """Hash of everything the cached POIs and scored graph depend on."""
     inputs = {
         "bbox": city.bbox,
-        "categories": [(c.id, c.osm_tags, c.weight) for c in city.categories],
+        "categories": [(c.id, c.osm_tags, c.weight, c.is_highlighted, c.highlight_if_tags) for c in city.categories],
     }
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 

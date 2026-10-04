@@ -112,6 +112,7 @@ def summarise(graph, edges, pois_by_id):
         "poi_ids": [pid for _, pid in along],
         "poi_minutes": [round(at * scale / METRES_PER_MIN, 1) for at, _ in along],
         "poi_score": int(sum(pois_by_id[pid]["weight"] for pid in poi_ids)),
+        "sights": sum(1 for pid in poi_ids if pois_by_id[pid].get("highlighted")),  # what the map pins
     }
 
 
@@ -162,15 +163,17 @@ def plan(graph, pois_by_id, source, target, budgets, k):
         length = sum(graph.edges[e]["length"] for e in edges)
         ids = set().union(*(graph.edges[e]["poi_set"] for e in edges))
         weight = sum(pois_by_id[p]["weight"] for p in ids)
-        scored.append((length, len(ids), weight, edges, lam, method))
+        sights = sum(pois_by_id[p]["weight"] for p in ids if pois_by_id[p].get("highlighted"))
+        scored.append((length, len(ids), weight, sights, edges, lam, method))
 
     scenic = {}
     for budget in budgets:
         limit = fastest_m + budget * METRES_PER_MIN + 1e-6
         feasible = [c for c in scored if c[0] <= limit]
-        # Highest weighted score of unique POIs (sights 3, parks 2, cafés/shops 1),
-        # then most unique POIs, then shortest.
-        length, _, _, edges, lam, method = max(feasible, key=lambda c: (c[2], c[1], -c[0]))
+        # Streets are scored with every category (lively café/shop streets pull the
+        # route), but the winner is the candidate passing the most highlighted sights
+        # (weighted), then the highest overall score, then the shortest.
+        length, _, _, _, edges, lam, method = max(feasible, key=lambda c: (c[3], c[2], -c[0]))
         best = summarise(graph, list(edges), pois_by_id)
         scenic[str(budget)] = {
             **best,

@@ -1,5 +1,5 @@
 -- Seed data for scenic walks (Milan). Idempotent: rerunning updates rows in place.
--- Run after migrations/20261003191500_scenic_walks.sql.
+-- Run after all migrations in supabase/migrations/.
 
 -- City. The bbox covers Porta Garibaldi, Brera, the Duomo and south to the Darsena.
 insert into public.cities (id, name, country, location_id, bbox, centre, is_active)
@@ -18,25 +18,29 @@ on conflict (id) do update set
   name = excluded.name, country = excluded.country, location_id = excluded.location_id,
   bbox = excluded.bbox, centre = excluded.centre, is_active = excluded.is_active;
 
--- POI categories. When a feature matches several, the highest weight wins.
-insert into public.poi_categories (id, label, osm_tags, weight, icon, sort_order) values
-  ('attraction',       'Landmark',   '{"tourism": ["attraction"]}',      3, 'Camera',          1),
-  ('museum',           'Museum',     '{"tourism": ["museum"]}',          3, 'Landmark',        2),
-  ('gallery',          'Gallery',    '{"tourism": ["gallery"]}',         3, 'Palette',         3),
-  ('artwork',          'Artwork',    '{"tourism": ["artwork"]}',         3, 'Brush',           4),
-  ('viewpoint',        'Viewpoint',  '{"tourism": ["viewpoint"]}',       3, 'Eye',             5),
-  ('historic',         'Historic',   '{"historic": "*"}',                3, 'Castle',          6),
-  ('place_of_worship', 'Church',     '{"amenity": ["place_of_worship"]}', 2, 'Church',         7),
-  ('fountain',         'Fountain',   '{"amenity": ["fountain"]}',        2, 'Droplets',        8),
-  ('park',             'Park',       '{"leisure": ["park"]}',            2, 'Trees',           9),
-  ('garden',           'Garden',     '{"leisure": ["garden"]}',          2, 'Flower2',        10),
-  ('cafe',             'Café',       '{"amenity": ["cafe"]}',            1, 'Coffee',         11),
-  ('restaurant',       'Restaurant', '{"amenity": ["restaurant"]}',      1, 'UtensilsCrossed', 12),
-  ('bar',              'Bar',        '{"amenity": ["bar"]}',             1, 'Wine',           13),
-  ('shop',             'Shop',       '{"shop": "*"}',                    1, 'ShoppingBag',    14)
+-- POI categories. When a feature matches several, the highest weight wins. Every
+-- category counts towards the street score; highlighted ones are also pinned, listed and
+-- counted as sights. Gardens are highlighted only when notable (they have a wikidata or
+-- wikipedia tag, e.g. Orto Botanico di Brera), not every courtyard or cloister.
+insert into public.poi_categories (id, label, osm_tags, weight, icon, sort_order, is_highlighted, highlight_if_tags) values
+  ('attraction',       'Landmark',   '{"tourism": ["attraction"]}',       3, 'Camera',           1, true,  '{}'),
+  ('museum',           'Museum',     '{"tourism": ["museum"]}',           3, 'Landmark',         2, true,  '{}'),
+  ('gallery',          'Gallery',    '{"tourism": ["gallery"]}',          3, 'Palette',          3, true,  '{}'),
+  ('artwork',          'Artwork',    '{"tourism": ["artwork"]}',          3, 'Brush',            4, true,  '{}'),
+  ('viewpoint',        'Viewpoint',  '{"tourism": ["viewpoint"]}',        3, 'Eye',              5, true,  '{}'),
+  ('historic',         'Historic',   '{"historic": "*"}',                 3, 'Castle',           6, true,  '{}'),
+  ('place_of_worship', 'Church',     '{"amenity": ["place_of_worship"]}', 2, 'Church',           7, true,  '{}'),
+  ('fountain',         'Fountain',   '{"amenity": ["fountain"]}',         2, 'Droplets',         8, true,  '{}'),
+  ('park',             'Park',       '{"leisure": ["park"]}',             2, 'Trees',            9, true,  '{}'),
+  ('garden',           'Garden',     '{"leisure": ["garden"]}',           2, 'Flower2',         10, false, '{wikidata,wikipedia}'),
+  ('cafe',             'Café',       '{"amenity": ["cafe"]}',             1, 'Coffee',          11, false, '{}'),
+  ('restaurant',       'Restaurant', '{"amenity": ["restaurant"]}',       1, 'UtensilsCrossed', 12, false, '{}'),
+  ('bar',              'Bar',        '{"amenity": ["bar"]}',              1, 'Wine',            13, false, '{}'),
+  ('shop',             'Shop',       '{"shop": "*"}',                     1, 'ShoppingBag',     14, false, '{}')
 on conflict (id) do update set
   label = excluded.label, osm_tags = excluded.osm_tags, weight = excluded.weight,
-  icon = excluded.icon, sort_order = excluded.sort_order;
+  icon = excluded.icon, sort_order = excluded.sort_order,
+  is_highlighted = excluded.is_highlighted, highlight_if_tags = excluded.highlight_if_tags;
 
 -- Places a walk can start or end at.
 insert into public.places (slug, city_id, name, location, kind, is_selectable)

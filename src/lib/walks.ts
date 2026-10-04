@@ -16,7 +16,7 @@ export type WalkOptions = {
   city: { id: string; name: string; country: string; centre: [number, number]; bbox: [number, number, number, number] };
   pairs: WalkPair[];
   budgets: TimeBudget[];
-  categories: { id: string; label: string; icon: string; weight: number }[];
+  categories: { id: string; label: string; icon: string; weight: number; is_highlighted: boolean }[];
 };
 
 export type LineString = { type: "LineString"; coordinates: [number, number][] };
@@ -39,6 +39,7 @@ export type Poi = {
   category_label: string;
   icon: string; // Lucide icon name, see walk-icons.ts
   weight: number;
+  highlighted: boolean; // from Supabase (poi_categories.is_highlighted / highlight_if_tags)
   lat: number;
   lng: number;
 };
@@ -120,8 +121,16 @@ export function loadWalk(cityId: string, pairId: string): Promise<Loaded<WalkFil
   );
 }
 
-/** Sights, parks, churches and fountains get pins; cafés and shops only count towards the total. */
-export const isSight = (poi: Poi) => poi.weight >= 2;
+/**
+ * Highlighted POIs (landmarks, museums, churches, parks…; set per category in Supabase)
+ * are pinned, listed and counted as sights. Cafés and shops still shape the scenic route
+ * through the street score but aren't shown.
+ */
+export const isSight = (poi: Poi) => poi.highlighted;
+
+export function countSights(route: Route, poisById: Map<string, Poi>) {
+  return route.poi_ids.reduce((n, id) => n + (poisById.get(id)?.highlighted ? 1 : 0), 0);
+}
 
 export const formatMinutes = (min: number) => `${Math.round(min)} min`;
 

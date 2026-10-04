@@ -32,6 +32,8 @@ class Category:
     weight: int
     icon: str
     sort_order: int
+    is_highlighted: bool  # pinned, listed and counted as a sight
+    highlight_if_tags: tuple[str, ...]  # otherwise highlight POIs carrying any of these OSM tags
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,8 @@ def load_city(city_id: str) -> CityConfig:
     xs, ys = [c[0] for c in ring], [c[1] for c in ring]
 
     categories = [
-        Category(r["id"], r["label"], r["osm_tags"], r["weight"], r["icon"], r["sort_order"])
+        Category(r["id"], r["label"], r["osm_tags"], r["weight"], r["icon"], r["sort_order"],
+                 r["is_highlighted"], tuple(r["highlight_if_tags"] or ()))
         for r in db.table("poi_categories").select("*").execute().data
     ]
     categories.sort(key=lambda c: (-c.weight, c.sort_order, c.id))
@@ -112,6 +115,7 @@ def upsert_pois(city_id: str, pois: list[dict], run_started: str) -> None:
             "name": p["name"],
             "category_id": p["category"],
             "weight": p["weight"],
+            "is_highlighted": bool(p.get("highlighted", False)),
             "location": f"SRID=4326;POINT({p['lng']} {p['lat']})",
             "updated_at": run_started,
         }

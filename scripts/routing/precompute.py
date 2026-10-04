@@ -37,16 +37,17 @@ def check(result, is_main_pair):
         failures.append(f"+0 route differs from fastest ({zero['distance_m']} vs {fastest['distance_m']} m)")
     ten = result["scenic"].get("10")
     if is_main_pair and ten:
-        ratio = len(ten["poi_ids"]) / max(len(fastest["poi_ids"]), 1)
+        # Sights = highlighted POIs, the number users see on the cards and map.
+        ratio = ten["sights"] / max(fastest["sights"], 1)
         if ratio < 2:
-            failures.append(f"+10 min passes {ratio:.2f}x the unique POIs of the fastest route (target 2x)")
+            failures.append(f"+10 min passes {ratio:.2f}x the sights of the fastest route (target 2x)")
     return failures
 
 
 def print_result(result):
     f = result["fastest"]
     print(f"\n{result['start']['name']} -> {result['end']['name']}  ({result['id']})")
-    print(f"  fastest  {f['distance_m']:>5} m  {f['duration_min']:>5} min  {len(f['poi_ids']):>4} POIs  score {f['poi_score']}")
+    print(f"  fastest  {f['distance_m']:>5} m  {f['duration_min']:>5} min  {f['sights']:>3} sights  {len(f['poi_ids']):>4} POIs  score {f['poi_score']}")
     for budget, s in result["scenic"].items():
-        print(f"  +{budget:<2} min  {s['distance_m']:>5} m  {s['duration_min']:>5} min  {len(s['poi_ids']):>4} POIs  "
-              f"score {s['poi_score']:<4} (+{s['extra_min']} min, {s['extra_pois']:+} POIs)")
+        print(f"  +{budget:<2} min  {s['distance_m']:>5} m  {s['duration_min']:>5} min  {s['sights']:>3} sights  {len(s['poi_ids']):>4} POIs  "
+              f"score {s['poi_score']:<4} (+{s['extra_min']} min, {s['sights'] - f['sights']:+} sights, {s['extra_pois']:+} POIs)")

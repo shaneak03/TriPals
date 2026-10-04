@@ -137,6 +137,7 @@ export function WalkPlanner({ cityId }: { cityId: string }) {
                   <RouteCards
                     fastest={fastest}
                     scenic={scenic}
+                    poisById={poisById}
                     selected={selected}
                     onSelect={setSelected}
                   />

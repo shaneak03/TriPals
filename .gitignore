@@ -41,7 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# routing pipeline: venv, secrets and raw OSM caches (outputs in public/data are committed)
+# routing pipeline: venv, secrets and caches (only the /walks fallback in public/data/walks is committed)
 /scripts/routing/.env
 /scripts/routing/.venv/
 /scripts/routing/cache/

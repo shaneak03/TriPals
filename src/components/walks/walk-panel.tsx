@@ -1,6 +1,7 @@
 import { Flag, MapPin } from "lucide-react";
 import { useId } from "react";
 import {
+  countSights,
   formatDistance,
   formatMinutes,
   isSight,
@@ -89,20 +90,26 @@ function PlaceSelect({
 export function RouteCards({
   fastest,
   scenic,
+  poisById,
   selected,
   onSelect,
 }: {
   fastest: Route;
   scenic: Route | null; // null when this budget hasn't been computed yet
+  poisById: Map<string, Poi>;
   selected: RouteKind;
   onSelect: (kind: RouteKind) => void;
 }) {
   const sameRoute = scenic?.extra_pois === 0 && scenic.distance_m === fastest.distance_m;
+  const fastestSights = countSights(fastest, poisById);
+  const moreSights = scenic ? countSights(scenic, poisById) - fastestSights : 0;
+  const extraMin = Math.round(scenic?.extra_min ?? 0);
   return (
     <div className="mt-6 space-y-3">
       <RouteCard
         title="Fastest"
         route={fastest}
+        sights={fastestSights}
         swatch={<span className="block h-1 w-6 rounded-full bg-[repeating-linear-gradient(90deg,#B8C2C9_0_6px,transparent_6px_10px)]" />}
         active={selected === "fastest"}
         onClick={() => onSelect("fastest")}
@@ -111,13 +118,16 @@ export function RouteCards({
         <RouteCard
           title="Most to see"
           route={scenic}
+          sights={fastestSights + moreSights}
           swatch={<span className="block h-[5px] w-6 rounded-full bg-accent" />}
           active={selected === "scenic"}
           onClick={() => onSelect("scenic")}
           chip={
             sameRoute
               ? "Same as fastest"
-              : `+${Math.round(scenic.extra_min ?? 0)} min · ${scenic.extra_pois ?? 0} more places`
+              : moreSights > 0
+                ? `+${extraMin} min · ${moreSights} more ${moreSights === 1 ? "sight" : "sights"}`
+                : `+${extraMin} min · livelier streets`
           }
         />
       ) : (
@@ -132,6 +142,7 @@ export function RouteCards({
 function RouteCard({
   title,
   route,
+  sights,
   swatch,
   active,
   onClick,
@@ -139,6 +150,7 @@ function RouteCard({
 }: {
   title: string;
   route: Route;
+  sights: number; // highlighted POIs only, so it matches the pins
   swatch: React.ReactNode;
   active: boolean;
   onClick: () => void;
@@ -159,7 +171,7 @@ function RouteCard({
           {title}
         </span>
         <span className="mt-1 block text-[13px] text-muted tabular-nums">
-          {formatDistance(route.distance_m)} · {route.poi_ids.length} places
+          {formatDistance(route.distance_m)} · {sights} {sights === 1 ? "sight" : "sights"}
         </span>
         {chip && (
           <span className="mt-2.5 inline-block rounded-full bg-accent-tint px-2.5 py-1 text-xs font-semibold text-accent-ink tabular-nums">
@@ -244,7 +256,7 @@ export function AlongTheWay({
       </ol>
       {others > 0 && (
         <p className="mt-3 px-1 text-[13px] text-muted">
-          Plus {others} cafés, restaurants and shops within 30 m of the route.
+          Plus {others} cafés, shops and other places within 30 m of the route.
         </p>
       )}
     </section>

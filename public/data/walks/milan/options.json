@@ -153,85 +153,99 @@
       "id": "attraction",
       "icon": "Camera",
       "label": "Landmark",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "museum",
       "icon": "Landmark",
       "label": "Museum",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "gallery",
       "icon": "Palette",
       "label": "Gallery",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "artwork",
       "icon": "Brush",
       "label": "Artwork",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "viewpoint",
       "icon": "Eye",
       "label": "Viewpoint",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "historic",
       "icon": "Castle",
       "label": "Historic",
-      "weight": 3
+      "weight": 3,
+      "is_highlighted": true
     },
     {
       "id": "place_of_worship",
       "icon": "Church",
       "label": "Church",
-      "weight": 2
+      "weight": 2,
+      "is_highlighted": true
     },
     {
       "id": "fountain",
       "icon": "Droplets",
       "label": "Fountain",
-      "weight": 2
+      "weight": 2,
+      "is_highlighted": true
     },
     {
       "id": "park",
       "icon": "Trees",
       "label": "Park",
-      "weight": 2
+      "weight": 2,
+      "is_highlighted": true
     },
     {
       "id": "garden",
       "icon": "Flower2",
       "label": "Garden",
-      "weight": 2
+      "weight": 2,
+      "is_highlighted": false
     },
     {
       "id": "cafe",
       "icon": "Coffee",
       "label": "Café",
-      "weight": 1
+      "weight": 1,
+      "is_highlighted": false
     },
     {
       "id": "restaurant",
       "icon": "UtensilsCrossed",
       "label": "Restaurant",
-      "weight": 1
+      "weight": 1,
+      "is_highlighted": false
     },
     {
       "id": "bar",
       "icon": "Wine",
       "label": "Bar",
-      "weight": 1
+      "weight": 1,
+      "is_highlighted": false
     },
     {
       "id": "shop",
       "icon": "ShoppingBag",
       "label": "Shop",
-      "weight": 1
+      "weight": 1,
+      "is_highlighted": false
     }
   ]
 }
