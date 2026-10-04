@@ -1,17 +1,7 @@
 import React from 'react';
 import RecommendationsList from '@/components/RecommendationsList';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase (ensure these are in your .env.local file)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function getTripData(tripId: string) {
-  // Real Supabase Query:
-  // const { data, error } = await supabase.from('trips').select('*').eq('id', tripId).single();
-  // if (data) return data;
-
   // Fallback mock data so your UI works before the database tables are built
   if (tripId === '12345') {
     return {
@@ -27,8 +17,11 @@ async function getTripData(tripId: string) {
   return null;
 }
 
-export default async function SharedTripPage({ params }: { params: { tripId: string } }) {
-  const tripData = await getTripData(params.tripId);
+// 1. Change the type of params to be a Promise
+export default async function SharedTripPage({ params }: { params: Promise<{ tripId: string }> }) {
+  // 2. Await the params before accessing tripId
+  const resolvedParams = await params;
+  const tripData = await getTripData(resolvedParams.tripId);
 
   if (!tripData) {
     return <div className="p-8 text-center text-red-500 font-bold">Trip not found.</div>;
